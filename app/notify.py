@@ -188,8 +188,11 @@ def alert_text(
         shipping = "free"
     else:
         shipping = f"{format_money(observation.shipping_minor, currency)} (included in the price)"
+    headline = (
+        "BACK IN STOCK" if event.rule_kind == "back_in_stock" else HEADLINES.get(event.event_type, HEADLINES["trigger"])
+    )
     lines = [
-        HEADLINES.get(event.event_type, HEADLINES["trigger"]),
+        headline,
         "",
         f"Product: {product.title}",
         f"Previous reference price: {format_money(reference, currency)}",

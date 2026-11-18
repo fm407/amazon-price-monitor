@@ -26,6 +26,19 @@
       {% endfor %}
     </tbody>
   </table></div>
+  <div class="card-body border-top">
+    <form class="row g-2 align-items-end" hx-post="/settings/test-provider" hx-target="#provider-test-result" hx-swap="innerHTML" hx-disabled-elt="find button">
+      <div class="col-12 col-md-3"><label class="form-label" for="test-provider">Test a provider</label>
+        <select class="form-select form-select-sm" id="test-provider" name="provider">
+          {% for r in provider_rows if r.configured %}<option value="{{ r.name }}">{{ r.label }}</option>{% endfor %}
+        </select></div>
+      <div class="col-12 col-md-6"><label class="form-label" for="test-input">Amazon link or ASIN</label>
+        <input class="form-control form-control-sm" id="test-input" name="input" placeholder="https://www.amazon.com/dp/B0XXXXXXXX" required minlength="10" maxlength="2000"></div>
+      <div class="col-12 col-md-3"><button class="btn btn-sm btn-outline-primary w-100">Send one test request</button></div>
+    </form>
+    <p class="small text-secondary mb-0 mt-2">Sends one real request and shows what the provider returned and how it would be used. Nothing is saved. The request counts against the limits.</p>
+    <div id="provider-test-result" class="mt-3" aria-live="polite"></div>
+  </div>
   <div class="card-footer small text-secondary">Providers are tried in this order. When one reaches its own monthly limit, the next one takes over. Health comes from this application's own request log. Costs are your configured estimates unless the provider reports actual usage.</div>
 </section>
 <div class="row g-3">
@@ -57,6 +70,9 @@
           <dt>Database</dt><dd>{{ 'ok' if health.checks.database else 'not reachable' }}</dd>
           <dt>Data directory</dt><dd>{{ 'writable' if health.checks.data_dir_writable else 'not writable' }}</dd>
           <dt>REST API token</dt><dd>{{ info.api_token }}</dd>
+          <dt>Confirm large drops</dt><dd>{{ 'at ' ~ info.confirm_drop_percent ~ '% or more' if info.confirm_drop_percent|float > 0 else 'off' }}</dd>
+          <dt>Pace monthly limits</dt><dd>{{ 'on' if info.pace_monthly_limits else 'off' }}</dd>
+          <dt>Scheduled backups</dt><dd>{% if info.backup_interval_hours %}every {{ info.backup_interval_hours }} hours, last: {{ localtime(info.last_backup_at) }}{% else %}off{% endif %}</dd>
         </dl>
       </div>
     </section>

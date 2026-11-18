@@ -36,13 +36,13 @@ def test_safe_defaults():
 def test_backup_command_writes_a_consistent_copy(ctx):
     import sqlite3
 
-    from app.__main__ import backup
+    from app.backup import backup
     from app.models import Product
 
     with ctx.sessions() as session:
         session.add(Product(asin="B0BACKUP01", title="Backup me", url="https://www.amazon.com/dp/B0BACKUP01"))
         session.commit()
-    path = backup(ctx.settings)
+    path = backup(ctx.settings, ctx.now())
     assert path.parent.name == "backups" and path.stat().st_mode & 0o777 == 0o600
     copy = sqlite3.connect(path)
     assert copy.execute("SELECT title FROM products").fetchall() == [("Backup me",)]
@@ -54,13 +54,13 @@ def test_restore_command_replaces_the_database_and_rejects_bad_files(ctx, tmp_pa
     import pytest
     from sqlalchemy import func, select
 
-    from app.__main__ import backup, restore
+    from app.backup import backup, restore
     from app.models import Product
 
     with ctx.sessions() as session:
         session.add(Product(asin="B0BACKUP01", title="Keep me", url="https://www.amazon.com/dp/B0BACKUP01"))
         session.commit()
-    saved = backup(ctx.settings)
+    saved = backup(ctx.settings, ctx.now())
     with ctx.sessions() as session:
         session.delete(session.scalars(select(Product)).one())
         session.add(Product(asin="B0LATER001", title="Added later", url="https://www.amazon.com/dp/B0LATER001"))

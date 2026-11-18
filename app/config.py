@@ -81,11 +81,18 @@ class Settings(BaseSettings):
     max_monthly_api_spend_usd: Decimal = Decimal("5.00")
     max_daily_api_requests: int = 100
     default_check_interval_minutes: int = 360
+    pace_monthly_limits: bool = True  # spread each provider's monthly limit over the month
+    confirm_drop_percent: Decimal = Field(default=Decimal(0), ge=0, lt=100)  # 0 = off
+    confirm_recheck_minutes: int = Field(default=15, ge=1, le=1440)
 
     # Scheduler
     scheduler_enabled: bool = True
     scheduler_tick_seconds: float = 30.0
     scheduler_batch_size: int = 5
+
+    # Backups
+    backup_interval_hours: int = Field(default=24, ge=0)  # 0 turns scheduled backups off
+    backup_keep: int = Field(default=7, ge=1)
 
     # Notifications
     discord_enabled: bool = True

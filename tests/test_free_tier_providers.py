@@ -269,6 +269,7 @@ def test_three_free_plans_are_used_one_after_another(tmp_path):
         serpapi_cost_per_request_usd=Decimal("0"), easyparser_cost_per_request_usd=Decimal("0"),
         scrapingdog_cost_per_request_usd=Decimal("0"),
         serpapi_max_monthly_requests=2, easyparser_max_monthly_requests=1, scrapingdog_max_monthly_requests=1,
+        pace_monthly_limits=False,
     )  # fmt: skip
     ctx = make_ctx(settings, http=httpx.Client(transport=httpx.MockTransport(handler)))
     assert provider_chain(ctx, None) == ["serpapi", "easyparser", "scrapingdog"]
@@ -329,7 +330,7 @@ def chain_ctx(tmp_path, handler, **overrides):
     values = {
         "provider": "easyparser", "fallback_provider": "scrapingdog", "allow_paid_api_requests": True,
         "easyparser_api_key": "easyparser-key-AAAA1111", "scrapingdog_api_key": "scrapingdog-key-BBBB2222",
-        "serpapi_api_key": "serpapi-key-CCCC3333", "provider_max_attempts": 1,
+        "serpapi_api_key": "serpapi-key-CCCC3333", "provider_max_attempts": 1, "pace_monthly_limits": False,
     }  # fmt: skip
     settings = Settings(
         _env_file=None, data_dir=tmp_path, scheduler_enabled=False, log_level="WARNING", **{**values, **overrides}

@@ -18,7 +18,9 @@ FIXED_TARGET = "fixed_target"
 PCT_BELOW_AVERAGE = "pct_below_average"
 NEW_LOW = "new_low"
 PCT_DROP_SINCE_LAST = "pct_drop_since_last"
-RULE_KINDS = (PCT_BELOW_BASELINE, FIXED_TARGET, PCT_BELOW_AVERAGE, NEW_LOW, PCT_DROP_SINCE_LAST)
+BACK_IN_STOCK = "back_in_stock"
+RULE_KINDS = (PCT_BELOW_BASELINE, FIXED_TARGET, PCT_BELOW_AVERAGE, NEW_LOW, PCT_DROP_SINCE_LAST, BACK_IN_STOCK)
+NO_THRESHOLD_KINDS = (NEW_LOW, BACK_IN_STOCK)
 PERCENT_KINDS = (PCT_BELOW_BASELINE, PCT_BELOW_AVERAGE, PCT_DROP_SINCE_LAST)
 
 
@@ -56,6 +58,11 @@ class Product(Base):
     latest_seller: Mapped[str | None] = mapped_column(String(200))
     latest_condition: Mapped[str | None] = mapped_column(String(10))
     availability: Mapped[str] = mapped_column(String(15), default="unknown")
+
+    # A sudden large drop that waits for a second reading before it is stored (see CONFIRM_DROP_PERCENT).
+    pending_price_minor: Mapped[int | None] = mapped_column(Integer)
+    pending_since: Mapped[datetime | None] = mapped_column(UTCDateTime)
+    pending_provider: Mapped[str | None] = mapped_column(String(20))
 
     # Check state
     created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)

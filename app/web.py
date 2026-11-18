@@ -317,9 +317,8 @@ def product_page(
 @router.post("/products/{product_id}/check")
 def product_check(request: Request, product: Product = Depends(web_product), ctx: AppContext = Depends(get_ctx)):
     result = check_product(ctx, product.id)
-    level = {"ok": "success", "busy": "warning", "skipped": "warning", "no_price": "warning"}.get(
-        result.status, "danger"
-    )
+    quiet = ("busy", "skipped", "no_price", "pending")
+    level = "success" if result.status == "ok" else ("warning" if result.status in quiet else "danger")
     flash(request, level, "Price check completed." if result.status == "ok" else f"Check result: {result.message}")
     return redirect(f"/products/{product.id}")
 
@@ -447,6 +446,16 @@ def settings_page(request: Request, ctx: AppContext = Depends(get_ctx), session:
         provider_rows=api.provider_status(ctx, session),
         health=api.health_report(request),
     )
+
+
+@router.post("/settings/test-provider")
+async def test_provider(request: Request, ctx: AppContext = Depends(get_ctx)):
+    form = await request.form()
+    try:
+        report = api.run_provider_test(ctx, str(form.get("provider", "")), str(form.get("input", "")))
+    except InvalidProductInput as exc:
+        report = {"ok": False, "category": "invalid_input", "message": str(exc)}
+    return render(request, "_provider_test.html", r=report)
 
 
 @router.post("/settings/test-notification")
