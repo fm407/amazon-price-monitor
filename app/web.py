@@ -44,8 +44,8 @@ class LoginRequired(Exception):
     pass
 
 
-def require_web_user(request: Request) -> str:
-    user = request.session.get("user")
+def require_web_user(request: Request, session: Session = Depends(get_session)) -> str:
+    user = security.session_user(request, session)
     if not user:
         raise LoginRequired
     request.state.auth = "session"
@@ -155,7 +155,7 @@ async def setup_submit(request: Request, ctx: AppContext = Depends(get_ctx), ses
     if error:
         return render(request, "setup.html", status_code=400, error=error, username=username)
     security.create_admin(ctx, session, username, password)
-    security.log_in(request, username)
+    security.log_in(request, username, session)
     flash(request, "success", "Administrator account created. You are signed in.")
     return redirect("/")
 
@@ -164,7 +164,7 @@ async def setup_submit(request: Request, ctx: AppContext = Depends(get_ctx), ses
 def login_form(request: Request, session: Session = Depends(get_session)):
     if not security.admin_exists(session):
         return redirect("/setup")
-    if request.session.get("user"):
+    if security.session_user(request, session):
         return redirect("/")
     return render(request, "login.html")
 
@@ -185,7 +185,7 @@ async def login_submit(request: Request, session: Session = Depends(get_session)
         security.log.warning("failed login attempt")
         return render(request, "login.html", status_code=401, error="Wrong username or password.", username=username)
     throttle.reset()
-    security.log_in(request, username)
+    security.log_in(request, username, session)
     return redirect("/")
 
 

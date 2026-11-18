@@ -10,7 +10,7 @@ FROM builder AS test
 COPY requirements-dev.txt /tmp/requirements-dev.txt
 RUN /venv/bin/pip install -r /tmp/requirements-dev.txt
 WORKDIR /app
-COPY pyproject.toml alembic.ini ./
+COPY pyproject.toml alembic.ini .env.example requirements.txt requirements-dev.txt ./
 COPY migrations ./migrations
 COPY app ./app
 COPY tests ./tests

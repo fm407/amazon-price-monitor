@@ -25,6 +25,9 @@ SCRYPT_MAXMEM = 128 * 1024 * 1024
 MIN_PASSWORD_LENGTH = 12
 MAX_PASSWORD_LENGTH = 256
 SAFE_METHODS = ("GET", "HEAD", "OPTIONS")
+MIN_SECRET_LENGTH = 32
+MAX_BODY_BYTES = 64 * 1024  # every legitimate request to this application is far smaller
+FORM_TYPE = "application/x-www-form-urlencoded"
 ADMIN_USER_KEY, ADMIN_HASH_KEY = "admin_username", "admin_password_hash"
 
 
@@ -78,13 +81,21 @@ def admin_exists(session: Session) -> bool:
 
 
 def _secret_file(path: Path) -> str:
-    """Read a secret from a 0600 file in the data directory, creating it on first use."""
+    """Read a secret from a 0600 file in the data directory, creating it on first use.
+
+    The file is written to a temporary name and renamed, so a crash cannot leave an empty secret.
+    A file that is too short (for example truncated by a full disk) is replaced.
+    """
     if path.exists():
-        return path.read_text().strip()
+        value = path.read_text().strip()
+        if len(value) >= MIN_SECRET_LENGTH:
+            return value
     value = secrets.token_urlsafe(32)
-    descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    temporary = path.with_name(path.name + ".tmp")
+    descriptor = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
     with os.fdopen(descriptor, "w") as handle:
         handle.write(value)
+    os.replace(temporary, path)
     return value
 
 
@@ -168,10 +179,27 @@ def csrf_token(request: Request) -> str:
     return token
 
 
-def log_in(request: Request, username: str) -> None:
+def admin_fingerprint(session: Session) -> str:
+    """Changes whenever the administrator password hash changes or the account is reset."""
+    stored = get_setting(session, ADMIN_HASH_KEY) or ""
+    return hashlib.sha256(stored.encode()).hexdigest()[:32] if stored else ""
+
+
+def log_in(request: Request, username: str, session: Session) -> None:
     request.session.clear()  # new session on login: prevents session fixation
     request.session["user"] = username
+    request.session["fp"] = admin_fingerprint(session)
     csrf_token(request)
+
+
+def session_user(request: Request, session: Session) -> str | None:
+    """The signed-in user, or None. A cookie issued before a password reset is no longer accepted."""
+    user = request.session.get("user")
+    fingerprint = admin_fingerprint(session)
+    supplied = str(request.session.get("fp", ""))
+    if not user or not fingerprint or not hmac.compare_digest(supplied.encode(), fingerprint.encode()):
+        return None
+    return user
 
 
 def _bearer_ok(request: Request, ctx: AppContext) -> bool:
@@ -182,12 +210,12 @@ def _bearer_ok(request: Request, ctx: AppContext) -> bool:
     )
 
 
-def require_user(request: Request, ctx: AppContext = Depends(get_ctx)) -> str:
+def require_user(request: Request, ctx: AppContext = Depends(get_ctx), session: Session = Depends(get_session)) -> str:
     """Authenticate by session cookie or, for REST clients, by the optional API bearer token."""
     if _bearer_ok(request, ctx):
         request.state.auth = "token"
         return "api-token"
-    user = request.session.get("user")
+    user = session_user(request, session)
     if not user:
         raise HTTPException(status_code=401, detail="Authentication required.")
     request.state.auth = "session"
@@ -198,13 +226,27 @@ async def require_csrf(request: Request) -> None:
     """State-changing requests made with a session cookie must carry the session's CSRF token."""
     if request.method in SAFE_METHODS or getattr(request.state, "auth", None) == "token":
         return
-    supplied = request.headers.get("x-csrf-token")
-    content_type = request.headers.get("content-type", "")
-    if not supplied and content_type.startswith(("application/x-www-form-urlencoded", "multipart/form-data")):
-        supplied = str((await request.form()).get("csrf_token", ""))
     expected = request.session.get("csrf")
-    if not expected or not supplied or not hmac.compare_digest(supplied.encode(), expected.encode()):
+    if not expected:
+        raise HTTPException(status_code=403, detail="Missing or invalid CSRF token.")  # before any body parsing
+    supplied = request.headers.get("x-csrf-token")
+    content_type = request.headers.get("content-type", "").split(";")[0].strip().lower()
+    if content_type == "multipart/form-data":
+        raise HTTPException(status_code=415, detail="Multipart requests are not supported.")
+    if not supplied and content_type == FORM_TYPE:
+        supplied = str((await request.form()).get("csrf_token", ""))
+    if not supplied or not hmac.compare_digest(supplied.encode(), expected.encode()):
         raise HTTPException(status_code=403, detail="Missing or invalid CSRF token.")
+
+
+def body_too_large(request: Request) -> int | None:
+    """HTTP status to reject with, or None. Bodies must declare a small Content-Length."""
+    if request.method in SAFE_METHODS:
+        return None
+    length = request.headers.get("content-length")
+    if length is None:
+        return 411 if "transfer-encoding" in request.headers else None
+    return 413 if not length.isdigit() or int(length) > MAX_BODY_BYTES else None
 
 
 SECURITY_HEADERS = {

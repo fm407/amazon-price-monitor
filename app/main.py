@@ -97,9 +97,20 @@ def register_error_handlers(app: FastAPI) -> None:
     async def unhandled(request: Request, exc: Exception) -> Response:
         log.exception("unhandled error", extra={"path": request.url.path})
         message = "Internal error. The details are in the application log."
+        # This handler runs outside the middleware above, so it adds the security headers itself.
         if _is_api(request):
-            return error_response(500, "internal_error", message)
-        return web.render(request, "error.html", status_code=500, message=message)
+            return finish_response(request, error_response(500, "internal_error", message))
+        return finish_response(request, web.render(request, "error.html", status_code=500, message=message))
+
+
+def finish_response(request: Request, response: Response, request_id: str = "") -> Response:
+    for header, value in security.SECURITY_HEADERS.items():
+        response.headers.setdefault(header, value)
+    if request_id:
+        response.headers["X-Request-ID"] = request_id
+    if not request.url.path.startswith("/static/"):
+        response.headers.setdefault("Cache-Control", "no-store")
+    return response
 
 
 def create_app(settings: Settings | None = None, ctx: AppContext | None = None) -> FastAPI:
@@ -147,15 +158,16 @@ def create_app(settings: Settings | None = None, ctx: AppContext | None = None) 
         request_id = f"req-{uuid.uuid4().hex[:12]}"
         token = job_id_var.set(request_id)
         try:
-            response = await call_next(request)
+            rejected = security.body_too_large(request)
+            if rejected:
+                response = error_response(
+                    rejected, "payload_rejected", "The request body is too large or has no length."
+                )
+            else:
+                response = await call_next(request)
         finally:
             job_id_var.reset(token)
-        for header, value in security.SECURITY_HEADERS.items():
-            response.headers.setdefault(header, value)
-        response.headers["X-Request-ID"] = request_id
-        if not request.url.path.startswith("/static/"):
-            response.headers.setdefault("Cache-Control", "no-store")
-        return response
+        return finish_response(request, response, request_id)
 
     app.add_middleware(
         SessionMiddleware,

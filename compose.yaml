@@ -2,7 +2,7 @@ services:
   app:
     build: .
     image: amazon-price-monitor:local
-    container_name: amazon-price-monitor
+    container_name: ${CONTAINER_NAME:-amazon-price-monitor}
     init: true
     restart: unless-stopped
     env_file:
@@ -17,7 +17,9 @@ services:
       - amazon-price-monitor-data:/app/data
     read_only: true
     tmpfs:
-      - /tmp
+      - /tmp:size=64m
+    mem_limit: 512m
+    pids_limit: 256
     cap_drop:
       - ALL
     security_opt:
@@ -26,4 +28,4 @@ services:
 
 volumes:
   amazon-price-monitor-data:
-    name: amazon-price-monitor-data
+    name: ${DATA_VOLUME:-amazon-price-monitor-data}
