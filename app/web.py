@@ -246,7 +246,7 @@ def dashboard(
         q=q,
         status=status,
         sort=sort,
-        providers=list(ctx.providers),
+        providers=[name for name, provider in ctx.providers.items() if provider.configured],
     )
 
 
@@ -305,7 +305,7 @@ def product_page(
         observations=recent(PriceObservation, PriceObservation.product_id),
         deliveries=deliveries,
         errors=errors,
-        providers=list(ctx.providers),
+        providers=[name for name, provider in ctx.providers.items() if provider.configured],
         default_interval=ctx.settings.default_check_interval_minutes,
         channels=list(ctx.notifiers),
         min_average=alerts.MIN_AVERAGE_OBSERVATIONS,
