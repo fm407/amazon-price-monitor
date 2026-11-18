@@ -128,6 +128,8 @@ def fetch(
             if request_id is None:
                 # Budget denials end the whole chain: never fall back to another paid provider.
                 assert denial is not None  # noqa: S101
+                if denial == "monthly_budget":
+                    budget.notify_exhausted_once(ctx)
                 return None, name, FetchFailure(denial, budget.DENIAL_MESSAGES[denial], skipped=True)
             outcome = _attempt(ctx, name, request_id, asin, marketplace)
             if isinstance(outcome, ProductData):

@@ -14,10 +14,11 @@ from typing import Any, cast
 from sqlalchemy import CursorResult, func, select, update
 from sqlalchemy.orm import Session
 
+from app import notify
 from app.config import Settings
 from app.context import AppContext
-from app.models import ProviderRequest
-from app.money import usd_to_micro
+from app.models import ApplicationSetting, ProviderRequest
+from app.money import micro_to_usd, usd_to_micro
 from app.providers.base import PriceProvider
 
 log = logging.getLogger(__name__)
@@ -172,3 +173,34 @@ def recover_interrupted(session: Session) -> int:
         .values(success=False, category="interrupted", detail="The application restarted during this request.")
     )
     return cast(CursorResult[Any], result).rowcount or 0
+
+
+BUDGET_NOTIFIED_KEY = "budget_notified_month"
+
+
+def notify_exhausted_once(ctx: AppContext) -> bool:
+    """Send one notification per calendar month when the monthly budget stops paid requests."""
+    month = ctx.now().strftime("%Y-%m")
+    with ctx.budget_lock, ctx.sessions() as session:
+        row = session.get(ApplicationSetting, BUDGET_NOTIFIED_KEY)
+        if row is not None and row.value == month:
+            return False
+        if row is None:
+            session.add(ApplicationSetting(key=BUDGET_NOTIFIED_KEY, value=month))
+        else:
+            row.value = month
+        current = usage(session, ctx.settings, ctx.now())
+        body = (
+            "API BUDGET EXHAUSTED\n\n"
+            f"Paid price checks are stopped for {month}.\n"
+            f"Spend this month: ${micro_to_usd(current.month_cost_micro)}"
+            f"{' (estimate)' if current.is_estimate else ''}\n"
+            f"Monthly limit: ${micro_to_usd(current.budget_micro)}\n"
+            "The application stays online. Checks resume next month or after you raise "
+            "MAX_MONTHLY_API_SPEND_USD."
+        )
+        notify.queue(session, ctx, subject="Amazon Price Monitor: API budget exhausted", body=body)
+        session.commit()
+    log.warning("monthly API budget exhausted", extra={"month": month})
+    notify.deliver_pending(ctx)
+    return True

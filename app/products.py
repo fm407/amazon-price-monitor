@@ -49,8 +49,8 @@ def validate_options(ctx: AppContext, values: dict[str, Any]) -> dict[str, Any]:
     if interval is not None and not 5 <= int(interval) <= 10080:
         raise InvalidProductUpdate("The check interval must be between 5 minutes and 7 days.")
     provider = clean.get("provider")
-    if provider and provider not in ctx.providers:
-        raise InvalidProductUpdate(f"Provider '{provider}' is not available in this deployment.")
+    if provider and (provider not in ctx.providers or not ctx.providers[provider].configured):
+        raise InvalidProductUpdate(f"Provider '{provider}' is not available or not configured in this deployment.")
     if "provider" in clean:
         clean["provider"] = provider or None
     if clean.get("seller_filter", "any") not in ("any", "amazon"):
