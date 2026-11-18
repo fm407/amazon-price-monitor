@@ -5,12 +5,13 @@ from pathlib import Path
 from urllib.parse import urlsplit
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from pydantic import model_validator
+from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 SECRETS_DIR = Path("/run/secrets")
 PROVIDER_NAMES = ("mock", "canopy", "apify")
 PAID_PROVIDERS = ("canopy", "apify")
+MIN_SECRET_LENGTH = 32
 DISCORD_HOSTS = ("discord.com", "discordapp.com", "ptb.discord.com", "canary.discord.com")
 
 
@@ -76,6 +77,12 @@ class Settings(BaseSettings):
     smtp_to: str = ""
     notify_mock_enabled: bool | None = None  # default: on when PROVIDER=mock
 
+    @field_validator("apify_max_charge_per_run_usd", "notify_mock_enabled", mode="before")
+    @classmethod
+    def _blank_means_unset(cls, value: object) -> object:
+        """`KEY=` in .env means "not set" for optional values."""
+        return None if isinstance(value, str) and not value.strip() else value
+
     @model_validator(mode="after")
     def _validate(self) -> "Settings":
         if self.provider not in PROVIDER_NAMES:
@@ -86,6 +93,12 @@ class Settings(BaseSettings):
                 raise ValueError(f"FALLBACK_PROVIDER must be empty or one of {PAID_PROVIDERS}")
             if self.fallback_provider == self.provider or self.provider == "mock":
                 raise ValueError("FALLBACK_PROVIDER must differ from PROVIDER, and PROVIDER must not be mock")
+        for name in ("secret_key", "api_token"):
+            value = getattr(self, name)
+            if value and len(value) < MIN_SECRET_LENGTH:
+                raise ValueError(
+                    f"{name.upper()} must be at least {MIN_SECRET_LENGTH} characters. Try: openssl rand -hex 32"
+                )
         if self.demo_mode and self.provider != "mock":
             raise ValueError("DEMO_MODE=true requires PROVIDER=mock")
         if self.discord_webhook_url:

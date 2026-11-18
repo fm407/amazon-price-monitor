@@ -153,11 +153,13 @@ def test_state_changing_requests_need_the_csrf_token(client):
 
 
 def test_bearer_token_authenticates_rest_clients(tmp_path):
-    settings = Settings(_env_file=None, data_dir=tmp_path, scheduler_enabled=False, api_token="rest-client-token-123")
+    settings = Settings(
+        _env_file=None, data_dir=tmp_path, scheduler_enabled=False, api_token="rest-client-token-0123456789abcdef"
+    )
     ctx = make_ctx(settings)
     with TestClient(create_app(ctx=ctx)) as rest:
         assert rest.get(f"{API}/products", headers={"Authorization": "Bearer wrong"}).status_code == 401
-        auth = {"Authorization": "Bearer rest-client-token-123"}
+        auth = {"Authorization": "Bearer rest-client-token-0123456789abcdef"}
         assert rest.post(f"{API}/products", json={"input": GPU}, headers=auth).status_code == 201  # no CSRF needed
         assert rest.get(f"{API}/products", headers=auth).json()["meta"]["total"] == 1
     ctx.close()
@@ -351,7 +353,7 @@ def test_test_notification_endpoint(client, ctx):
 
 def test_system_endpoints_never_expose_secrets(tmp_path):
     secrets = {
-        "secret_key": "session-secret-value-1", "api_token": "api-token-value-22",
+        "secret_key": "session-secret-value-0123456789abcdef", "api_token": "api-token-value-0123456789abcdef-22",
         "canopy_api_key": "canopy-key-value-333",
         "apify_token": "apify-token-value-4444", "smtp_password": "smtp-password-55555",
         "discord_webhook_url": "https://discord.com/api/webhooks/42/discord-token-666666",
@@ -361,7 +363,7 @@ def test_system_endpoints_never_expose_secrets(tmp_path):
         smtp_from="a@example.com", smtp_to="b@example.com", **secrets,
     )  # fmt: skip
     ctx = make_ctx(settings)
-    auth = {"Authorization": "Bearer api-token-value-22"}
+    auth = {"Authorization": "Bearer api-token-value-0123456789abcdef-22"}
     with TestClient(create_app(ctx=ctx)) as rest:
         rest.post(f"{API}/products", json={"input": GPU}, headers=auth)
         bodies = [
@@ -427,7 +429,7 @@ def test_unhandled_errors_are_sanitised(ctx, monkeypatch):
         raise RuntimeError("secret internal detail /app/data/monitor.db")
 
     monkeypatch.setattr("app.api.usage_report", boom)
-    settings_token = "rest-client-token-123"
+    settings_token = "rest-client-token-0123456789abcdef"
     ctx.settings.api_token = settings_token
     with TestClient(create_app(ctx=ctx), raise_server_exceptions=False) as rest:
         response = rest.get(f"{API}/usage", headers={"Authorization": f"Bearer {settings_token}"})

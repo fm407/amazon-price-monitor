@@ -177,7 +177,7 @@ def _trim_raw(data: ProductData) -> dict[str, Any]:
 def _update_metadata(product: Product, data: ProductData) -> None:
     # Fill the title once. After that it belongs to the user, who may have renamed the product.
     if data.title and product.title == placeholder_title(product.asin):
-        product.title = data.title[:500]
+        product.title = " ".join(data.title.split())[:500] or product.title
     if data.brand:
         product.brand = data.brand[:200]
     if data.image_url and data.image_url.startswith(("https://", "/static/")) and len(data.image_url) <= 1000:

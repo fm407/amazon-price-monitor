@@ -25,6 +25,7 @@ RANGES = {
     "30d": timedelta(days=30),
     "90d": timedelta(days=90),
 }
+FORMULA_PREFIXES = "=+-@\t\r"
 EDITABLE = {"title", "provider", "check_interval_minutes", "seller_filter", "include_used"}
 
 
@@ -56,7 +57,7 @@ def validate_options(ctx: AppContext, values: dict[str, Any]) -> dict[str, Any]:
     if clean.get("seller_filter", "any") not in ("any", "amazon"):
         raise InvalidProductUpdate("seller_filter must be 'any' or 'amazon'.")
     if "title" in clean:
-        title = str(clean["title"] or "").strip()
+        title = " ".join(str(clean["title"] or "").split())  # single line: titles go into email subjects
         if not title or len(title) > 500:
             raise InvalidProductUpdate("The title must be between 1 and 500 characters.")
         clean["title"] = title
@@ -184,5 +185,7 @@ def to_csv(rows: list[dict[str, Any]], fields: tuple[str, ...]) -> str:
     writer.writeheader()
     for row in rows:
         # Neutralise spreadsheet formula injection in user-influenced text such as titles.
-        writer.writerow({k: f"'{v}" if isinstance(v, str) and v[:1] in "=+-@" else v for k, v in row.items()})
+        writer.writerow(
+            {k: f"'{v}" if isinstance(v, str) and v and v[0] in FORMULA_PREFIXES else v for k, v in row.items()}
+        )
     return buffer.getvalue()
