@@ -5,7 +5,7 @@ from pathlib import Path
 from urllib.parse import urlsplit
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from pydantic import field_validator, model_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 SECRETS_DIR = Path("/run/secrets")
@@ -43,8 +43,8 @@ class Settings(BaseSettings):
     canopy_base_url: str = "https://rest.canopyapi.co"
     canopy_cost_per_request_usd: Decimal = Decimal("0.01")
     canopy_max_concurrency: int = 2
-    canopy_max_monthly_requests: int | None = None  # e.g. 100 for a free plan
-    canopy_max_monthly_spend_usd: Decimal | None = None
+    canopy_max_monthly_requests: int | None = Field(default=None, ge=0)  # e.g. 100 for a free plan
+    canopy_max_monthly_spend_usd: Decimal | None = Field(default=None, ge=0)
 
     apify_token: str = ""
     apify_actor_id: str = ""
@@ -55,8 +55,8 @@ class Settings(BaseSettings):
     apify_max_charge_per_run_usd: Decimal | None = None
     apify_run_timeout_seconds: int = 180
     apify_max_concurrency: int = 1
-    apify_max_monthly_requests: int | None = None
-    apify_max_monthly_spend_usd: Decimal | None = None  # e.g. 5.00 for the free plan credit
+    apify_max_monthly_requests: int | None = Field(default=None, ge=0)
+    apify_max_monthly_spend_usd: Decimal | None = Field(default=None, ge=0)  # e.g. 5.00 for the free plan credit
 
     # Cost controls
     allow_paid_api_requests: bool = False

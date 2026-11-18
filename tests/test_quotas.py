@@ -110,3 +110,23 @@ def test_settings_page_and_api_show_usage_per_provider(tmp_path):
     by_name = {row["name"]: row for row in rows}
     assert (by_name["canopy"]["month_requests"], by_name["canopy"]["monthly_limit"]) == (1, "100 requests")
     assert (by_name["apify"]["month_requests"], by_name["apify"]["monthly_limit"]) == (0, "$5.00")
+
+
+def test_unconfigured_provider_in_the_chain_reserves_nothing(tmp_path):
+    calls: list[str] = []
+    ctx = paid_ctx(tmp_path, both_ok(calls), canopy_api_key="", max_monthly_api_spend_usd=Decimal("50"))
+    pid = tracked(ctx)
+    assert check_product(ctx, pid).provider == "apify"  # Canopy has no key: skipped without a ledger entry
+    assert categories(ctx) == [("apify", "ok")]
+    with ctx.sessions() as session:
+        assert budget.provider_month(session, "canopy", ctx.now()) == (0, 0)
+
+
+def test_negative_limits_are_rejected():
+    import pytest
+
+    from app.config import Settings
+
+    for field in ("canopy_max_monthly_requests", "apify_max_monthly_spend_usd"):
+        with pytest.raises(ValueError):
+            Settings(_env_file=None, **{field: -1})

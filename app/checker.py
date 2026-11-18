@@ -118,6 +118,10 @@ def fetch(
     name: str | None = None
     for name in chain:
         provider = ctx.providers[name]
+        if not provider.configured:
+            # No request can be sent, so nothing is reserved against the budget or the provider's limit.
+            failure = FetchFailure("not_configured", f"The {name} provider has no credentials configured.")
+            continue
         blocked = ctx.blocked_until.get(name)
         if blocked and blocked > ctx.now():
             budget.record_skip(ctx, provider, product_id, asin, "provider_blocked")
