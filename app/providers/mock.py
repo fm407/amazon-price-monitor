@@ -56,9 +56,7 @@ class MockProvider:
         if mode == "outage":
             raise ProviderError("network", "Simulated provider outage", retryable=True)
         if mode == "rate_limit":
-            raise ProviderError(
-                "rate_limited", "Simulated rate limit", retryable=True, http_status=429, retry_after=1
-            )
+            raise ProviderError("rate_limited", "Simulated rate limit", retryable=True, http_status=429, retry_after=1)
         if mode == "auth":
             raise ProviderError("auth", "Simulated invalid API key", http_status=401, block_seconds=60)
         if mode == "not_found":

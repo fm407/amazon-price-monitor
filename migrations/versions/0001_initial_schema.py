@@ -145,9 +145,7 @@ def upgrade() -> None:
     )
     with op.batch_alter_table("provider_requests", schema=None) as batch_op:
         batch_op.create_index(batch_op.f("ix_provider_requests_product_id"), ["product_id"], unique=False)
-        batch_op.create_index(
-            "ix_provider_requests_provider_started_at", ["provider", "started_at"], unique=False
-        )
+        batch_op.create_index("ix_provider_requests_provider_started_at", ["provider", "started_at"], unique=False)
         batch_op.create_index(batch_op.f("ix_provider_requests_started_at"), ["started_at"], unique=False)
 
     op.create_table(
@@ -213,9 +211,7 @@ def upgrade() -> None:
         sa.UniqueConstraint("event_id", "channel", name=op.f("uq_notification_deliveries_event_id")),
     )
     with op.batch_alter_table("notification_deliveries", schema=None) as batch_op:
-        batch_op.create_index(
-            batch_op.f("ix_notification_deliveries_created_at"), ["created_at"], unique=False
-        )
+        batch_op.create_index(batch_op.f("ix_notification_deliveries_created_at"), ["created_at"], unique=False)
         batch_op.create_index(
             "ix_notification_deliveries_status_next_attempt_at", ["status", "next_attempt_at"], unique=False
         )

@@ -10,9 +10,7 @@ from urllib.parse import urljoin, urlsplit
 import httpx
 
 ASIN_RE = re.compile(r"^[A-Z0-9]{10}$")
-PATH_ASIN_RE = re.compile(
-    r"/(?:dp|gp/product|gp/aw/d|exec/obidos/ASIN|o/ASIN|product)/([A-Za-z0-9]{10})(?=[/?#]|$)"
-)
+PATH_ASIN_RE = re.compile(r"/(?:dp|gp/product|gp/aw/d|exec/obidos/ASIN|o/ASIN|product)/([A-Za-z0-9]{10})(?=[/?#]|$)")
 MAX_INPUT_LENGTH = 2000
 MAX_REDIRECTS = 5
 
