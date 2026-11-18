@@ -1,0 +1,4 @@
+{# Trend indicator: symbol plus words, never colour alone. #}
+{% if c.trend == 'down' %}<span class="trend-down" title="Price went down at the last change">&#9660; down</span>
+{% elif c.trend == 'up' %}<span class="trend-up" title="Price went up at the last change">&#9650; up</span>
+{% else %}<span class="text-secondary" title="No change at the last check">&#9644; steady</span>{% endif %}

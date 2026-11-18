@@ -161,6 +161,10 @@ def schedule_next(ctx: AppContext, product: Product, now: datetime, *, transient
     product.next_check_at = now + timedelta(minutes=delay + jitter)
 
 
+def placeholder_title(asin: str) -> str:
+    return f"Amazon product {asin}"
+
+
 def _trim_raw(data: ProductData) -> dict[str, Any]:
     raw: dict[str, Any] = {"provider_price_basis": data.price_basis, **data.raw}
     if len(json.dumps(raw, default=str)) > RAW_LIMIT_BYTES:
@@ -169,7 +173,8 @@ def _trim_raw(data: ProductData) -> dict[str, Any]:
 
 
 def _update_metadata(product: Product, data: ProductData) -> None:
-    if data.title:
+    # Fill the title once. After that it belongs to the user, who may have renamed the product.
+    if data.title and product.title == placeholder_title(product.asin):
         product.title = data.title[:500]
     if data.brand:
         product.brand = data.brand[:200]

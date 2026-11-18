@@ -53,3 +53,10 @@ def ctx(settings):
 @pytest.fixture
 def mock(ctx) -> MockProvider:
     return ctx.providers["mock"]
+
+
+@pytest.fixture(autouse=True)
+def fast_password_hashing(monkeypatch):
+    """Keep the suite fast. One dedicated test exercises the production scrypt parameters."""
+    monkeypatch.setattr("app.security.SCRYPT_N", 2**4)
+    monkeypatch.setattr("app.security.SCRYPT_P", 1)

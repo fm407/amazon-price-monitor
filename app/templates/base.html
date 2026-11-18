@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en" data-bs-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="htmx-config" content='{"includeIndicatorStyles":false,"allowEval":false}'>
+  <title>{% block title %}Dashboard{% endblock %} | Price Monitor</title>
+  <link rel="icon" href="/static/img/favicon.svg">
+  <link rel="stylesheet" href="/static/vendor/bootstrap.min.css">
+  <link rel="stylesheet" href="/static/css/app.css">
+  <script src="/static/js/theme.js"></script>
+</head>
+<body hx-headers='{"X-CSRF-Token": "{{ csrf }}"}'>
+<nav class="navbar border-bottom mb-3">
+  <div class="container-xl gap-2">
+    <a class="navbar-brand fw-semibold" href="/"><img src="/static/img/favicon.svg" alt="" width="26" height="26">Price Monitor</a>
+    {% if user %}
+    <div class="d-flex flex-wrap align-items-center gap-1 gap-sm-3">
+      <a class="nav-link" href="/">Dashboard</a>
+      <a class="nav-link" href="/activity">Activity</a>
+      <a class="nav-link" href="/settings">Settings</a>
+      <button type="button" class="btn btn-sm btn-outline-secondary" id="theme-toggle" aria-label="Switch between dark and light theme">Theme</button>
+      <form method="post" action="/logout" class="d-inline">
+        <input type="hidden" name="csrf_token" value="{{ csrf }}">
+        <button class="btn btn-sm btn-outline-secondary">Sign out</button>
+      </form>
+    </div>
+    {% endif %}
+  </div>
+</nav>
+<main class="container-xl pb-5">
+  {% if user and mock_mode %}
+  <div class="alert alert-warning py-2" role="status">
+    <strong>Mock provider active.</strong> Every price shown is fictional{% if demo_mode %} demonstration data{% endif %}. No Amazon data is being fetched.
+  </div>
+  {% endif %}
+  {% for level, message in flashes %}
+  <div class="alert alert-{{ level }} py-2" role="alert">{{ message }}</div>
+  {% endfor %}
+  {% block content %}{% endblock %}
+</main>
+<footer class="container-xl text-secondary small pb-4">Amazon Price Monitor v{{ version }}</footer>
+<script src="/static/vendor/htmx.min.js" defer></script>
+<script src="/static/js/app.js" defer></script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

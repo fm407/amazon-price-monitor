@@ -1,0 +1,246 @@
+{% extends "base.html" %}
+{% block title %}{{ p.title|truncate(60) }}{% endblock %}
+{% block content %}
+{% set cur = c.currency %}
+<div class="d-flex gap-3 align-items-start mb-3 flex-wrap flex-md-nowrap">
+  <div class="product-thumb product-thumb-lg flex-shrink-0">
+    {% if p.image_url %}<img src="{{ p.image_url }}" alt="Product image" referrerpolicy="no-referrer">{% else %}<span class="text-secondary small">No image</span>{% endif %}
+  </div>
+  <div class="min-w-0">
+    <h1 class="h4 mb-1">{{ p.title }}</h1>
+    <div class="mb-2">{% include "_status.html" %}</div>
+    <div class="text-secondary small">
+      {{ p.brand or 'Brand unknown' }} · ASIN {{ p.asin }} · Marketplace {{ p.marketplace }} ·
+      <a href="{{ p.url }}" target="_blank" rel="noopener noreferrer">Open on Amazon</a>
+    </div>
+    {% if p.last_error %}<div class="alert alert-warning py-1 px-2 mt-2 mb-0 small" role="status">Last check: {{ p.last_error }}</div>{% endif %}
+  </div>
+</div>
+
+<div class="d-flex flex-wrap gap-2 mb-3">
+  <form method="post" action="/products/{{ p.id }}/check"><input type="hidden" name="csrf_token" value="{{ csrf }}"><button class="btn btn-primary btn-sm">Check price now</button></form>
+  {% if p.status == 'active' %}
+  <form method="post" action="/products/{{ p.id }}/pause"><input type="hidden" name="csrf_token" value="{{ csrf }}"><button class="btn btn-outline-secondary btn-sm">Pause monitoring</button></form>
+  {% else %}
+  <form method="post" action="/products/{{ p.id }}/resume"><input type="hidden" name="csrf_token" value="{{ csrf }}"><button class="btn btn-outline-success btn-sm">Resume monitoring</button></form>
+  {% endif %}
+  <form method="post" action="/products/{{ p.id }}/baseline"><input type="hidden" name="csrf_token" value="{{ csrf }}"><button class="btn btn-outline-secondary btn-sm" title="Use the latest valid price as the new baseline">Reset baseline to current price</button></form>
+  <a class="btn btn-outline-secondary btn-sm" href="/api/v1/products/{{ p.id }}/history/export?format=csv">Export CSV</a>
+  <a class="btn btn-outline-secondary btn-sm" href="/api/v1/products/{{ p.id }}/history/export?format=json">Export JSON</a>
+</div>
+
+<section class="ticker ticker-6 mb-3" aria-label="Price summary">
+  {% for label, value in [
+    ('Current price', p.latest_price_minor|money(cur)),
+    ('Baseline', p.baseline_minor|money(cur)),
+    ('Target', c.target|money(cur) if c.target is not none else 'not set'),
+    ('Historical low', p.lowest_minor|money(cur)),
+    ('Historical high', p.highest_minor|money(cur)),
+    ('Historical average', average|money(cur) if average is not none else 'unknown'),
+  ] %}
+  <div class="ticker-cell">
+    <div class="ticker-label">{{ label }}</div>
+    <div class="ticker-value">{{ value }}</div>
+    {% if loop.first %}<div class="ticker-note">{% include "_trend.html" %}{% if c.change is not none and c.change != 0 %} · {{ c.change|pct }} {{ 'below' if c.change < 0 else 'above' }} baseline{% endif %}</div>{% endif %}
+    {% if loop.index == 3 and c.progress is not none %}<progress class="target-meter" max="100" value="{{ c.progress }}" aria-label="Progress from baseline to target">{{ c.progress }}%</progress><div class="ticker-note">{{ c.progress }}% of the way</div>{% endif %}
+  </div>
+  {% endfor %}
+</section>
+
+<section class="card mb-3">
+  <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+    <span class="fw-semibold">Price history</span>
+    <div class="btn-group btn-group-sm" role="group" aria-label="Chart range" id="chart-ranges">
+      {% for value, label in [('24h', '24 hours'), ('7d', '7 days'), ('30d', '30 days'), ('90d', '90 days'), ('all', 'All')] %}
+      <button type="button" class="btn btn-outline-secondary {% if value == '30d' %}active{% endif %}" data-range="{{ value }}">{{ label }}</button>
+      {% endfor %}
+    </div>
+  </div>
+  <div class="card-body">
+    <div class="chart-box"><canvas id="price-chart" data-url="/api/v1/products/{{ p.id }}/history" role="img" aria-label="Price history chart"></canvas></div>
+    <p class="text-secondary small mb-0 mt-2" id="chart-note">Each point is one stored observation. Lines only connect neighbouring points; they are not confirmed prices.</p>
+  </div>
+</section>
+
+<div class="row g-3">
+  <div class="col-12 col-xl-7">
+    <section class="card mb-3">
+      <div class="card-header fw-semibold">Alert rules</div>
+      <div class="card-body">
+        {% for rule in p.rules %}
+        <form method="post" action="/rules/{{ rule.id }}/update" class="rule-form border rounded p-2 mb-2">
+          <input type="hidden" name="csrf_token" value="{{ csrf }}">
+          <div class="d-flex justify-content-between flex-wrap gap-2 mb-2">
+            <div><strong>{{ describe(rule, cur) }}</strong>
+              {% if rule.is_below %}<span class="badge text-bg-info">Currently below</span>{% endif %}
+              {% if not rule.enabled %}<span class="badge text-bg-secondary">Disabled</span>{% endif %}
+              <div class="text-secondary small">Last triggered: {{ localtime(rule.last_triggered_at) }}{% if rule.last_trigger_price_minor %} at {{ rule.last_trigger_price_minor|money(cur) }}{% endif %}</div>
+              {% if rule.kind == 'pct_below_average' and observation_count < min_average %}<div class="small text-warning-emphasis">Waiting for history: needs {{ min_average }} earlier observations.</div>{% endif %}
+            </div>
+            <div class="form-check form-switch"><input class="form-check-input" type="checkbox" role="switch" id="enabled-{{ rule.id }}" name="enabled" {% if rule.enabled %}checked{% endif %}><label class="form-check-label" for="enabled-{{ rule.id }}">Enabled</label></div>
+          </div>
+          <div class="row g-2 align-items-end">
+            {% if rule.kind != 'new_low' %}
+            <div class="col-6 col-md-3"><label class="form-label small" for="threshold-{{ rule.id }}">{{ 'Target price' if rule.kind == 'fixed_target' else 'Percent' }}</label>
+              <input class="form-control form-control-sm" id="threshold-{{ rule.id }}" name="threshold" type="number" step="0.01" min="0.01" value="{{ '%.2f'|format(rule.threshold / 100) }}"></div>
+            {% endif %}
+            <div class="col-6 col-md-3"><label class="form-label small" for="cooldown-{{ rule.id }}">Cooldown (min)</label>
+              <input class="form-control form-control-sm" id="cooldown-{{ rule.id }}" name="cooldown_minutes" type="number" min="0" max="43200" value="{{ rule.cooldown_minutes }}"></div>
+            {% if rule.kind in ('pct_below_baseline', 'fixed_target', 'pct_below_average') %}
+            <div class="col-6 col-md-3"><label class="form-label small" for="reminder-{{ rule.id }}">Remind every (min)</label>
+              <input class="form-control form-control-sm" id="reminder-{{ rule.id }}" name="reminder_minutes" type="number" min="10" max="43200" placeholder="off" value="{{ rule.reminder_minutes or '' }}"></div>
+            <div class="col-6 col-md-3"><label class="form-label small" for="further-{{ rule.id }}">Re-alert on further drop (%)</label>
+              <input class="form-control form-control-sm" id="further-{{ rule.id }}" name="further_drop_percent" type="number" step="0.1" min="0.1" max="99" placeholder="off" value="{{ '%.1f'|format(rule.further_drop_bp / 100) if rule.further_drop_bp else '' }}"></div>
+            {% endif %}
+            {% if rule.kind == 'pct_below_average' %}
+            <div class="col-6 col-md-3"><label class="form-label small" for="lookback-{{ rule.id }}">Lookback (days)</label>
+              <input class="form-control form-control-sm" id="lookback-{{ rule.id }}" name="lookback_days" type="number" min="1" max="3650" value="{{ rule.lookback_days }}"></div>
+            {% endif %}
+          </div>
+          <div class="d-flex flex-wrap align-items-center gap-3 mt-2">
+            <span class="small text-secondary">Channels (none ticked = all):</span>
+            {% for ch in channels %}
+            <div class="form-check form-check-inline m-0"><input class="form-check-input" type="checkbox" id="ch-{{ rule.id }}-{{ ch }}" name="channel_{{ ch }}" {% if ch in rule.channels %}checked{% endif %}><label class="form-check-label small" for="ch-{{ rule.id }}-{{ ch }}">{{ ch|capitalize }}</label></div>
+            {% else %}<span class="small text-warning-emphasis">No notification channel is configured.</span>{% endfor %}
+            <span class="ms-auto d-flex gap-2">
+              <button class="btn btn-sm btn-primary">Save</button>
+              <button class="btn btn-sm btn-outline-danger" formaction="/rules/{{ rule.id }}/delete" data-confirm="Delete this alert rule?">Delete</button>
+            </span>
+          </div>
+        </form>
+        {% else %}<p class="text-secondary">No alert rules yet. Add one below.</p>{% endfor %}
+
+        <form method="post" action="/products/{{ p.id }}/rules" class="row g-2 align-items-end mt-1">
+          <input type="hidden" name="csrf_token" value="{{ csrf }}">
+          <div class="col-12 col-md-5"><label class="form-label small" for="new-kind">New alert type</label>
+            <select class="form-select form-select-sm" id="new-kind" name="kind">
+              {% for kind, label in kind_labels.items() %}<option value="{{ kind }}">{{ label }}</option>{% endfor %}
+            </select></div>
+          <div class="col-6 col-md-3"><label class="form-label small" for="new-threshold">Percent or price</label>
+            <input class="form-control form-control-sm" id="new-threshold" name="threshold" type="number" step="0.01" min="0.01" placeholder="e.g. 25"></div>
+          <div class="col-6 col-md-2"><label class="form-label small" for="new-cooldown">Cooldown (min)</label>
+            <input class="form-control form-control-sm" id="new-cooldown" name="cooldown_minutes" type="number" min="0" value="60"></div>
+          <div class="col-12 col-md-2"><button class="btn btn-sm btn-outline-primary w-100">Add rule</button></div>
+        </form>
+      </div>
+    </section>
+
+    <section class="card mb-3">
+      <div class="card-header fw-semibold">Recent price observations</div>
+      <div class="table-responsive">
+        <table class="table table-sm mb-0 align-middle">
+          <thead><tr><th>Checked</th><th>Monitored price</th><th>Shipping</th><th>Seller</th><th>Condition</th><th>Provider</th></tr></thead>
+          <tbody>
+            {% for o in observations %}
+            <tr><td>{{ localtime(o.observed_at) }}</td><td>{{ o.price_minor|money(o.currency) }}</td>
+              <td>{% if o.shipping_minor is none %}unknown{% elif o.shipping_minor == 0 %}free{% else %}{{ o.shipping_minor|money(o.currency) }}{% endif %}</td>
+              <td>{{ o.seller or 'unknown' }}</td><td>{{ o.condition }}</td><td>{{ o.provider|capitalize }}</td></tr>
+            {% else %}<tr><td colspan="6" class="text-secondary">No valid price has been recorded yet.</td></tr>{% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="card-footer small text-secondary">{{ observation_count }} observations stored. When shipping is unknown, the monitored price is the item price only.</div>
+    </section>
+  </div>
+
+  <div class="col-12 col-xl-5">
+    <section class="card mb-3">
+      <div class="card-header fw-semibold">Details</div>
+      <div class="card-body">
+        <dl class="card-facts mb-0">
+          <dt>Seller</dt><dd>{{ p.latest_seller or 'unknown' }}</dd>
+          <dt>Condition</dt><dd>{{ p.latest_condition or 'unknown' }}</dd>
+          <dt>Availability</dt><dd>{{ {'in_stock': 'In stock', 'out_of_stock': 'Out of stock'}.get(p.availability, 'unknown') }}</dd>
+          <dt>First price</dt><dd>{{ p.initial_price_minor|money(cur) }}</dd>
+          <dt>Added</dt><dd>{{ localtime(p.created_at) }}</dd>
+          <dt>Last successful check</dt><dd>{{ localtime(p.last_success_at) }}</dd>
+          <dt>Last attempted check</dt><dd>{{ localtime(p.last_attempt_at) }}</dd>
+          <dt>Last price change</dt><dd>{{ localtime(p.last_price_change_at) }}</dd>
+          <dt>Next check</dt><dd>{{ localtime(p.next_check_at) if p.status == 'active' else 'paused' }}</dd>
+        </dl>
+      </div>
+    </section>
+
+    <section class="card mb-3">
+      <div class="card-header fw-semibold">Monitoring settings</div>
+      <div class="card-body">
+        <form method="post" action="/products/{{ p.id }}/edit" class="row g-2">
+          <input type="hidden" name="csrf_token" value="{{ csrf }}">
+          <div class="col-12"><label class="form-label small" for="title">Title</label>
+            <input class="form-control form-control-sm" id="title" name="title" value="{{ p.title }}" maxlength="500" required></div>
+          <div class="col-6"><label class="form-label small" for="interval">Check every</label>
+            <select class="form-select form-select-sm" id="interval" name="check_interval_minutes">
+              <option value="">Default ({{ default_interval }} min)</option>
+              {% for minutes, label in intervals %}<option value="{{ minutes }}" {% if p.check_interval_minutes == minutes %}selected{% endif %}>{{ label }}</option>{% endfor %}
+            </select></div>
+          <div class="col-6"><label class="form-label small" for="provider">Provider</label>
+            <select class="form-select form-select-sm" id="provider" name="provider">
+              <option value="">Default</option>
+              {% for name in providers %}<option value="{{ name }}" {% if p.provider == name %}selected{% endif %}>{{ name|capitalize }}</option>{% endfor %}
+            </select></div>
+          <div class="col-6"><label class="form-label small" for="seller_filter">Seller</label>
+            <select class="form-select form-select-sm" id="seller_filter" name="seller_filter">
+              <option value="any" {% if p.seller_filter == 'any' %}selected{% endif %}>Any eligible seller</option>
+              <option value="amazon" {% if p.seller_filter == 'amazon' %}selected{% endif %}>Amazon as seller only</option>
+            </select></div>
+          <div class="col-6 d-flex align-items-end"><div class="form-check"><input class="form-check-input" type="checkbox" id="include_used" name="include_used" {% if p.include_used %}checked{% endif %}><label class="form-check-label small" for="include_used">Include used or refurbished offers</label></div></div>
+          <div class="col-12"><button class="btn btn-sm btn-primary">Save settings</button></div>
+        </form>
+        <hr>
+        <form method="post" action="/products/{{ p.id }}/baseline" class="row g-2 align-items-end">
+          <input type="hidden" name="csrf_token" value="{{ csrf }}">
+          <div class="col-7"><label class="form-label small" for="baseline">Set baseline manually</label>
+            <input class="form-control form-control-sm" id="baseline" name="price" type="number" step="0.01" min="0.01" required></div>
+          <div class="col-5"><button class="btn btn-sm btn-outline-secondary w-100">Set baseline</button></div>
+        </form>
+      </div>
+    </section>
+
+    {% if mock_mode %}
+    <section class="card mb-3 border-warning">
+      <div class="card-header fw-semibold">Simulate a mock price</div>
+      <div class="card-body">
+        <form method="post" action="/products/{{ p.id }}/simulate" class="row g-2 align-items-end">
+          <input type="hidden" name="csrf_token" value="{{ csrf }}">
+          <div class="col-6"><label class="form-label small" for="sim-price">Fictional price</label>
+            <input class="form-control form-control-sm" id="sim-price" name="price" type="number" step="0.01" min="0"></div>
+          <div class="col-6"><label class="form-label small" for="sim-mode">Provider behaviour</label>
+            <select class="form-select form-select-sm" id="sim-mode" name="mode">
+              {% for value, label in [('ok', 'Normal'), ('no_price', 'No price'), ('out_of_stock', 'Out of stock'), ('outage', 'Outage'), ('rate_limit', 'Rate limited'), ('invalid', 'Invalid response')] %}<option value="{{ value }}">{{ label }}</option>{% endfor %}
+            </select></div>
+          <div class="col-12"><button class="btn btn-sm btn-warning">Apply and check</button></div>
+        </form>
+        <p class="small text-secondary mb-0 mt-2">Only available with the mock provider. Use it to try alerts without any paid API.</p>
+      </div>
+    </section>
+    {% endif %}
+
+    <section class="card mb-3">
+      <div class="card-header fw-semibold">Recent notifications</div>
+      <ul class="list-group list-group-flush">
+        {% for d in deliveries %}
+        <li class="list-group-item small">{{ d.channel|capitalize }} · <strong>{{ d.status }}</strong> · {{ localtime(d.created_at) }}<br><span class="text-secondary">{{ d.subject }}{% if d.last_error %} · {{ d.last_error }}{% endif %}</span></li>
+        {% else %}<li class="list-group-item small text-secondary">No notifications for this product yet.</li>{% endfor %}
+      </ul>
+    </section>
+
+    <section class="card mb-3">
+      <div class="card-header fw-semibold">Check errors</div>
+      <ul class="list-group list-group-flush">
+        {% for r in errors %}
+        <li class="list-group-item small">{{ r.provider|capitalize }} · <strong>{{ r.category }}</strong>{% if r.http_status %} · HTTP {{ r.http_status }}{% endif %} · {{ localtime(r.started_at) }}<br><span class="text-secondary">{{ r.detail or '' }}</span></li>
+        {% else %}<li class="list-group-item small text-secondary">No recent errors.</li>{% endfor %}
+      </ul>
+    </section>
+
+    <form method="post" action="/products/{{ p.id }}/delete">
+      <input type="hidden" name="csrf_token" value="{{ csrf }}">
+      <button class="btn btn-outline-danger btn-sm" data-confirm="Delete this product and its full price history?">Delete product</button>
+    </form>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script src="/static/vendor/chart.umd.min.js" defer></script>
+<script src="/static/js/chart.js" defer></script>
+{% endblock %}

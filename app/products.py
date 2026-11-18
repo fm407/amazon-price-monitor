@@ -11,7 +11,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.amazon import parse_product_input
-from app.checker import CheckResult, check_product
+from app.checker import CheckResult, check_product, placeholder_title
 from app.context import AppContext
 from app.models import PriceObservation, Product
 from app.money import from_minor
@@ -83,7 +83,7 @@ def add_product(
     product = Product(
         asin=identity.asin,
         marketplace=identity.marketplace,
-        title=f"Amazon product {identity.asin}",
+        title=placeholder_title(identity.asin),
         url=identity.url,
         is_demo=is_demo,
         created_at=ctx.now(),

@@ -1,0 +1,5 @@
+{% if p.status == 'paused' %}<span class="badge text-bg-secondary">Paused</span>
+{% elif p.consecutive_failures > 0 %}<span class="badge text-bg-danger">Failing</span>
+{% else %}<span class="badge text-bg-success">Active</span>{% endif %}
+{% if c.below %}<span class="badge text-bg-info">Below target</span>{% endif %}
+{% if p.is_demo %}<span class="badge text-bg-warning">Demo</span>{% endif %}
