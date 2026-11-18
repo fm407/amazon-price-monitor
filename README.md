@@ -14,7 +14,7 @@
   <img alt="FastAPI" src="https://img.shields.io/badge/FastAPI-0.164-009688">
   <img alt="SQLite" src="https://img.shields.io/badge/database-SQLite%20(WAL)-0f6ab4">
   <img alt="Docker" src="https://img.shields.io/badge/deploy-docker%20compose-2496ed">
-  <img alt="Tests" src="https://img.shields.io/badge/tests-330%20passing-2ea44f">
+  <img alt="Tests" src="https://img.shields.io/badge/tests-335%20passing-2ea44f">
   <img alt="Coverage" src="https://img.shields.io/badge/coverage-95%25-2ea44f">
 </p>
 
@@ -242,7 +242,7 @@ The reasoning behind each decision is in [docs/ARCHITECTURE.md](docs/ARCHITECTUR
 
 ## Verification status
 
-- 330 automated tests pass on macOS and inside a Linux container. Line coverage is 95%.
+- 335 automated tests pass on macOS and inside a Linux container. Line coverage is 95%.
 - The Docker script builds the image, runs the full alert scenario, restarts and recreates the
   container, and confirms that data and alert state persist.
 - Dependencies are pinned with hashes. The vulnerability audit reports no known issues.

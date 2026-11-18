@@ -74,6 +74,9 @@ alert. In email it is an attachment.
 - A chart needs at least two stored prices. The first alert of a brand-new product may come without one.
 - If the chart cannot be drawn, or Discord does not accept the upload, the alert is sent without it.
   An alert is never held back because of the chart.
+- Only the first delivery attempt carries the chart. A retry after a temporary failure sends the
+  alert text alone.
+- The chart shows prices in the alert's currency only.
 - The test notification has no chart.
 - The chart shows prices and dates only. Product titles are not drawn into the image.
 

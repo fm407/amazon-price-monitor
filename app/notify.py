@@ -61,6 +61,7 @@ class MockNotifier:
     """Records messages instead of sending them. Used in mock mode, demos and tests."""
 
     name = "mock"
+    KEEP = 200
 
     def __init__(self) -> None:
         self.sent: list[str] = []
@@ -69,6 +70,7 @@ class MockNotifier:
     def send(self, delivery: NotificationDelivery, chart: bytes | None = None) -> None:
         self.sent.append(delivery.body)
         self.charts.append(chart)
+        del self.sent[: -self.KEEP], self.charts[: -self.KEEP]  # bounded memory in a long-running mock setup
         log.info("mock notification delivered", extra={"subject": delivery.subject})
 
 
@@ -322,7 +324,11 @@ def chart_for_event(ctx: AppContext, session: Session, event_id: int | None) -> 
         since = ctx.now() - timedelta(days=ctx.settings.alert_chart_days)
         rows = session.execute(
             select(PriceObservation.observed_at, PriceObservation.price_minor)
-            .where(PriceObservation.product_id == event.product_id, PriceObservation.observed_at >= since)
+            .where(
+                PriceObservation.product_id == event.product_id,
+                PriceObservation.observed_at >= since,
+                PriceObservation.currency == event.currency,  # never plot two currencies on one axis
+            )
             .order_by(PriceObservation.observed_at.desc(), PriceObservation.id.desc())
             .limit(CHART_MAX_POINTS)
         ).all()
@@ -377,9 +383,12 @@ def deliver_pending(ctx: AppContext) -> int:
         charts: dict[int | None, bytes | None] = {}  # one rendering per alert, shared by its channels
         for delivery in due:
             if delivery.channel in ctx.notifiers:
-                if delivery.event_id not in charts:
+                # Only the first attempt carries the chart. A retry is about getting the alert through,
+                # and must not upload again what the channel may just have refused.
+                first_attempt = delivery.attempts == 0
+                if first_attempt and delivery.event_id not in charts:
                     charts[delivery.event_id] = chart_for_event(ctx, session, delivery.event_id)
-                _attempt(ctx, session, delivery, charts[delivery.event_id])
+                _attempt(ctx, session, delivery, charts.get(delivery.event_id) if first_attempt else None)
         return len(due)
 
 

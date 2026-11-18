@@ -40,7 +40,7 @@ Last run: 2026-11-18.
 
 | Check | Command | Result |
 |---|---|---|
-| Automated tests, including security tests | `./scripts/check.sh` | 330 passed |
+| Automated tests, including security tests | `./scripts/check.sh` | 335 passed |
 | Security lint rules (bandit rule set) | `ruff check .` | no findings |
 | Known vulnerabilities in dependencies | `pip-audit -r requirements.txt --disable-pip` | none found |
 | Container properties | `./scripts/docker_test.sh` | non-root, read-only filesystem, private secret files, token absent from logs |

@@ -51,8 +51,8 @@ Run on 2026-11-18.
 | `ruff check` (includes security rules) | passed |
 | `ruff format --check` | passed |
 | `mypy` | passed, 32 source files |
-| `pytest` on macOS, Python 3.14 | 330 passed |
-| `pytest` in the Linux container, Python 3.14 | 330 passed |
+| `pytest` on macOS, Python 3.14 | 335 passed |
+| `pytest` in the Linux container, Python 3.14 | 335 passed |
 | Line coverage | 95% |
 | `pip-audit` | no known vulnerabilities |
 | `scripts/docker_test.sh` | all checks passed |

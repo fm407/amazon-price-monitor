@@ -47,7 +47,7 @@ def _ticks(low: float, high: float) -> list[int]:
     while value <= high:
         ticks.append(int(round(value)))
         value += step
-    return ticks
+    return sorted(set(ticks))  # sub-unit steps round to the same value
 
 
 def render_price_chart(
@@ -74,6 +74,10 @@ def render_price_chart(
     padding = max((highest - lowest) * 0.08, highest * 0.01, 1.0)
     low, high = lowest - padding, highest + padding
     start, span = times[0], max(times[-1] - times[0], 1.0)
+    ticks = _ticks(low, high)
+    # Widen the left margin when the price labels need more room, so large amounts are never cut off.
+    widest = max(draw.textlength(format_money(value, currency), font=font) for value in ticks) if ticks else 0
+    left = max(left, int(widest) + 22 * SCALE)
 
     def x_of(stamp: float) -> float:
         return left + (stamp - start) / span * (right - left)
@@ -81,7 +85,7 @@ def render_price_chart(
     def y_of(value: float) -> float:
         return bottom - (value - low) / (high - low) * (bottom - top)
 
-    for value in _ticks(low, high):
+    for value in ticks:
         y = y_of(value)
         draw.line([(left, y), (right, y)], fill=GRID, width=SCALE)
         draw.text((left - 10 * SCALE, y), format_money(value, currency), fill=TEXT, font=font, anchor="rm")

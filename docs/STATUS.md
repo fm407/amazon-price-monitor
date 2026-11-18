@@ -68,7 +68,7 @@ Verified means: exercised by an automated test or by the Docker script on 2026-1
 | Container restarts preserve data | verified | Docker script |
 | Health checks work | verified | Docker script |
 | No secrets exposed | verified | `test_system_endpoints_never_expose_secrets`, log checks |
-| Automated tests pass | verified | 330 passed locally and in the container |
+| Automated tests pass | verified | 335 passed locally and in the container |
 | Documentation complete | done | This folder |
 
 ## Awaiting live verification
