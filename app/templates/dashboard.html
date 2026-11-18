@@ -1,0 +1,155 @@
+{% extends "base.html" %}
+{% block content %}
+{% set u = stats.usage %}
+<section class="ticker mb-3" aria-label="Overview">
+  {% for label, value, note, tone in [
+    ('Products tracked', stats.total, stats.active ~ ' active, ' ~ stats.paused ~ ' paused', ''),
+    ('Below alert threshold', stats.below, 'at or under target now', 'is-good' if stats.below else ''),
+    ('Active monitors', stats.active, '', ''),
+    ('Paused monitors', stats.paused, '', ''),
+    ('Failed checks', stats.failing, 'products whose last check failed', 'is-bad' if stats.failing else ''),
+    ('API requests this month', u.requests, u.failed_requests ~ ' failed', ''),
+    ('API spend this month', u.cost_usd|usd, ('estimate, ' if u.cost_is_estimate else '') ~ 'limit ' ~ u.max_monthly_api_spend_usd|usd, ''),
+    ('Next scheduled check', localtime(stats.next_check) if stats.next_check else 'none', '', 'is-text'),
+  ] %}
+  <div class="ticker-cell {{ tone if tone != 'is-text' else '' }}">
+    <div class="ticker-label">{{ label }}</div>
+    <div class="ticker-value {{ 'is-text' if tone == 'is-text' else '' }}">{{ value }}</div>
+    {% if note %}<div class="ticker-note">{{ note }}</div>{% endif %}
+  </div>
+  {% endfor %}
+</section>
+
+{% if u.paid_requests_blocked_reason and not mock_mode %}
+<div class="alert alert-warning py-2" role="status">
+  <strong>Paid price checks are stopped.</strong>
+  {% if u.paid_requests_blocked_reason == 'paid_disabled' %}Paid API requests are disabled. Set <code>ALLOW_PAID_API_REQUESTS=true</code> to enable them.
+  {% elif u.paid_requests_blocked_reason == 'monthly_budget' %}The monthly budget of {{ u.max_monthly_api_spend_usd|usd }} is used up. Checks resume next month or after you raise the limit.
+  {% else %}The daily limit of {{ u.max_daily_api_requests }} requests is reached. Checks resume tomorrow (UTC).{% endif %}
+</div>
+{% endif %}
+
+<details class="card mb-3" {% if not cards and not q and not status %}open{% endif %}>
+  <summary class="card-header fw-semibold">Add a product</summary>
+  <div class="card-body">
+    <form method="post" action="/products" class="row g-2 align-items-end">
+      <input type="hidden" name="csrf_token" value="{{ csrf }}">
+      <div class="col-12 col-lg-5">
+        <label class="form-label" for="input">Amazon link or ASIN</label>
+        <input class="form-control" id="input" name="input" placeholder="https://www.amazon.com/dp/B0XXXXXXXX" required minlength="10" maxlength="2000">
+      </div>
+      <div class="col-6 col-lg-2">
+        <label class="form-label" for="discount_percent">Alert at discount (%)</label>
+        <input class="form-control" id="discount_percent" name="discount_percent" type="number" min="0.1" max="99.9" step="0.1" value="25">
+      </div>
+      <div class="col-6 col-lg-2">
+        <label class="form-label" for="target_price">Or target price</label>
+        <input class="form-control" id="target_price" name="target_price" type="number" min="0.01" step="0.01" placeholder="optional">
+      </div>
+      <div class="col-6 col-lg-2">
+        <label class="form-label" for="check_interval_minutes">Check every</label>
+        <select class="form-select" id="check_interval_minutes" name="check_interval_minutes">
+          <option value="">Default</option>
+          {% for minutes, label in intervals %}<option value="{{ minutes }}">{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="col-6 col-lg-1"><button class="btn btn-primary w-100">Add</button></div>
+    </form>
+    <p class="text-secondary small mb-0 mt-2">The first valid price becomes the baseline. A 25% discount on an $800.00 baseline alerts at $600.00 or less.</p>
+  </div>
+</details>
+
+<form method="get" action="/" class="row g-2 mb-3" role="search">
+  <div class="col-12 col-md-5">
+    <label class="visually-hidden" for="q">Search products</label>
+    <input class="form-control" id="q" name="q" value="{{ q }}" placeholder="Search title, brand or ASIN">
+  </div>
+  <div class="col-5 col-md-3">
+    <label class="visually-hidden" for="status">Filter</label>
+    <select class="form-select" id="status" name="status">
+      {% for value, label in [('', 'All products'), ('active', 'Active'), ('paused', 'Paused'), ('failing', 'Failing'), ('below', 'Below target')] %}
+      <option value="{{ value }}" {% if status == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
+    </select>
+  </div>
+  <div class="col-5 col-md-3">
+    <label class="visually-hidden" for="sort">Sort</label>
+    <select class="form-select" id="sort" name="sort">
+      {% for value, label in [('title', 'Sort by title'), ('discount', 'Sort by discount'), ('price', 'Sort by current price'), ('change', 'Sort by latest price change'), ('added', 'Sort by newest')] %}
+      <option value="{{ value }}" {% if sort == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
+    </select>
+  </div>
+  <div class="col-2 col-md-1"><button class="btn btn-outline-secondary w-100">Go</button></div>
+</form>
+
+<section class="row g-3 mb-4" aria-label="Products">
+  {% for c in cards %}{% set p = c.p %}
+  <div class="col-12 col-md-6 col-xl-4">
+    <article class="card h-100 product-card{% if c.below %} is-below{% endif %}">
+      <div class="card-body d-flex gap-3">
+        <a href="/products/{{ p.id }}" class="product-thumb flex-shrink-0" aria-hidden="true" tabindex="-1">
+          {% if p.image_url %}<img src="{{ p.image_url }}" alt="" loading="lazy" referrerpolicy="no-referrer">{% else %}<span class="text-secondary small">No image</span>{% endif %}
+        </a>
+        <div class="min-w-0 flex-grow-1">
+          <h2 class="h6 mb-1 text-truncate-2"><a class="stretched-link text-reset text-decoration-none" href="/products/{{ p.id }}">{{ p.title }}</a></h2>
+          <div class="mb-1">{% include "_status.html" %}</div>
+          <div class="d-flex align-items-baseline gap-2 flex-wrap">
+            <span class="price">{{ p.latest_price_minor|money(c.currency) }}</span>
+            {% include "_trend.html" %}
+          </div>
+          {% if c.progress is not none %}
+          <progress class="target-meter" max="100" value="{{ c.progress }}" aria-label="Progress from baseline to target">{{ c.progress }}%</progress>
+          <div class="meter-caption"><span>Baseline {{ p.baseline_minor|money(c.currency) }}</span><span>{{ c.progress }}% to target {{ c.target|money(c.currency) }}</span></div>
+          {% endif %}
+          <dl class="card-facts small mb-0 mt-2">
+            {% if c.progress is none %}<dt>Baseline</dt><dd>{{ p.baseline_minor|money(c.currency) }}</dd>{% endif %}
+            <dt>Change</dt><dd>{% if c.change is none %}unknown{% elif c.change < 0 %}<span class="trend-down">&#9660; {{ c.change|pct }} below baseline</span>{% elif c.change > 0 %}<span class="trend-up">&#9650; {{ c.change|pct }} above baseline</span>{% else %}at baseline{% endif %}</dd>
+            {% if c.progress is none %}<dt>Target</dt><dd>{{ c.target|money(c.currency) if c.target is not none else 'not set' }}</dd>{% endif %}
+            <dt>Lowest</dt><dd>{{ p.lowest_minor|money(c.currency) }}</dd>
+            <dt>Availability</dt><dd>{{ {'in_stock': 'In stock', 'out_of_stock': 'Out of stock'}.get(p.availability, 'unknown') }}</dd>
+            <dt>Checked</dt><dd>{{ localtime(p.last_attempt_at) }}</dd>
+            <dt>Provider</dt><dd>{{ (p.provider or default_provider)|capitalize }}</dd>
+          </dl>
+        </div>
+      </div>
+    </article>
+  </div>
+  {% else %}
+  <div class="col-12"><div class="card"><div class="card-body text-secondary">
+    {% if q or status %}No products match this filter.{% else %}No products yet. Add an Amazon link above to start tracking.{% endif %}
+  </div></div></div>
+  {% endfor %}
+</section>
+
+<section class="row g-3">
+  <div class="col-12 col-lg-4"><div class="card h-100">
+    <div class="card-header fw-semibold">Recent price drops</div>
+    <ul class="list-group list-group-flush">
+      {% for p in stats.drops %}
+      <li class="list-group-item small"><a href="/products/{{ p.id }}">{{ p.title|truncate(48) }}</a><br>
+        <span class="trend-down">&#9660;</span> {{ p.previous_price_minor|money(p.currency) }} to {{ p.latest_price_minor|money(p.currency) }}
+        <span class="text-secondary">· {{ localtime(p.last_price_change_at) }}</span></li>
+      {% else %}<li class="list-group-item small text-secondary">No price drops recorded yet.</li>{% endfor %}
+    </ul>
+  </div></div>
+  <div class="col-12 col-lg-4"><div class="card h-100">
+    <div class="card-header fw-semibold">Recent alerts</div>
+    <ul class="list-group list-group-flush">
+      {% for e in stats.events %}
+      <li class="list-group-item small"><a href="/products/{{ e.product_id }}">{{ e.product.title|truncate(48) }}</a><br>
+        {{ kind_labels.get(e.rule_kind, e.rule_kind) }}: {{ e.price_minor|money(e.currency) }}
+        <span class="text-secondary">· {{ localtime(e.created_at) }}</span></li>
+      {% else %}<li class="list-group-item small text-secondary">No alerts yet.</li>{% endfor %}
+    </ul>
+    <div class="card-footer small"><a href="/activity">All alerts and notifications</a></div>
+  </div></div>
+  <div class="col-12 col-lg-4"><div class="card h-100">
+    <div class="card-header fw-semibold">Recent operational failures</div>
+    <ul class="list-group list-group-flush">
+      {% for r in stats.failures %}
+      <li class="list-group-item small">{{ r.provider|capitalize }} · {{ r.asin }} · <strong>{{ r.category }}</strong><br>
+        <span class="text-secondary">{{ r.detail or '' }} · {{ localtime(r.started_at) }}</span></li>
+      {% else %}<li class="list-group-item small text-secondary">No failures recorded.</li>{% endfor %}
+    </ul>
+  </div></div>
+</section>
+{% endblock %}

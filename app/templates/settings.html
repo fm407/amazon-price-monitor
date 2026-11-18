@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block title %}Settings{% endblock %}
+{% block content %}
+<h1 class="h4 mb-3">Settings and status</h1>
+<p class="text-secondary small">Configuration is read from environment variables or mounted secret files. Secrets are never shown here. Change a value in <code>.env</code>, then run <code>docker compose up -d</code>.</p>
+<section class="ticker mb-3" aria-label="API usage">
+  <div class="ticker-cell"><div class="ticker-label">API requests this month</div><div class="ticker-value">{{ usage.requests }}</div><div class="ticker-note">{{ usage.failed_requests }} failed, {{ usage.paid_requests }} paid</div></div>
+  <div class="ticker-cell"><div class="ticker-label">Spend this month{{ ' (estimate)' if usage.cost_is_estimate else '' }}</div><div class="ticker-value">{{ usage.cost_usd|usd }}</div><div class="ticker-note">provider-reported: {{ usage.provider_reported_cost_usd|usd }}</div></div>
+  <div class="ticker-cell"><div class="ticker-label">Monthly limit</div><div class="ticker-value">{{ usage.max_monthly_api_spend_usd|usd }}</div><div class="ticker-note">{{ usage.remaining_usd|usd }} remaining</div></div>
+  <div class="ticker-cell {{ 'is-good' if usage.paid_requests_allowed else '' }}"><div class="ticker-label">Paid requests</div><div class="ticker-value is-text">{{ 'Enabled' if usage.paid_requests_allowed else 'Disabled' }}</div><div class="ticker-note">{{ usage.paid_requests_today }} of {{ usage.max_daily_api_requests }} today</div></div>
+</section>
+<div class="row g-3">
+  <div class="col-12 col-lg-6">
+    <section class="card mb-3">
+      <div class="card-header">Price providers</div>
+      <div class="table-responsive"><table class="table table-sm mb-0 align-middle">
+        <thead><tr><th>Provider</th><th>Role</th><th>Health</th><th>Est. cost per request</th></tr></thead>
+        <tbody>
+          {% for r in provider_rows %}
+          <tr><td>{{ r.name|capitalize }}</td><td>{{ r.role }}</td><td>{{ r.health }}</td><td class="num">{{ r.estimated_cost_per_request_usd|usd }}</td></tr>
+          {% endfor %}
+        </tbody>
+      </table></div>
+      <div class="card-footer small text-secondary">Health comes from this application's own request log. Costs are your configured estimates unless the provider reports actual usage.</div>
+    </section>
+    <section class="card mb-3">
+      <div class="card-header">Notifications</div>
+      <div class="card-body">
+        <dl class="card-facts mb-3">
+          <dt>Discord webhook</dt><dd>{{ info.discord }}</dd>
+          <dt>SMTP email</dt><dd>{{ info.smtp }}</dd>
+          <dt>Active channels</dt><dd>{{ info.notification_channels|join(', ') or 'none' }}</dd>
+        </dl>
+        <button class="btn btn-primary btn-sm" hx-post="/settings/test-notification" hx-target="#test-result" hx-swap="innerHTML" hx-disabled-elt="this">Send test notification</button>
+        <div id="test-result" class="mt-3" aria-live="polite"></div>
+      </div>
+    </section>
+  </div>
+  <div class="col-12 col-lg-6">
+    <section class="card mb-3">
+      <div class="card-header">Application</div>
+      <div class="card-body">
+        <dl class="card-facts mb-0">
+          <dt>Version</dt><dd>{{ info.version }}</dd>
+          <dt>Active provider</dt><dd>{{ info.provider|capitalize }}</dd>
+          <dt>Fallback provider</dt><dd>{{ (info.fallback_provider or 'none')|capitalize }}</dd>
+          <dt>Demo mode</dt><dd>{{ 'on' if info.demo_mode else 'off' }}</dd>
+          <dt>Default check interval</dt><dd>{{ info.default_check_interval_minutes }} minutes</dd>
+          <dt>Time zone</dt><dd>{{ info.timezone }}</dd>
+          <dt>Scheduler</dt><dd>{{ 'running' if health.checks.scheduler and info.scheduler_enabled else ('disabled' if not info.scheduler_enabled else 'not healthy') }}</dd>
+          <dt>Database</dt><dd>{{ 'ok' if health.checks.database else 'not reachable' }}</dd>
+          <dt>Data directory</dt><dd>{{ 'writable' if health.checks.data_dir_writable else 'not writable' }}</dd>
+          <dt>REST API token</dt><dd>{{ info.api_token }}</dd>
+        </dl>
+      </div>
+    </section>
+    <section class="card mb-3">
+      <div class="card-header">Export</div>
+      <div class="card-body d-flex flex-wrap gap-2">
+        <a class="btn btn-outline-secondary btn-sm" href="/api/v1/export/products?format=csv">Products (CSV)</a>
+        <a class="btn btn-outline-secondary btn-sm" href="/api/v1/export/products?format=json">Products (JSON)</a>
+        <a class="btn btn-outline-secondary btn-sm" href="/api/v1/openapi.json">OpenAPI document</a>
+      </div>
+      <div class="card-footer small text-secondary">Price history exports are on each product page.</div>
+    </section>
+  </div>
+</div>
+{% endblock %}

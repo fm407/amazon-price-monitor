@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 160" role="img" aria-label="Demonstration product placeholder">
+  <rect width="160" height="160" fill="#f3f5f9"/>
+  <rect x="26" y="52" width="108" height="58" rx="8" fill="#0f141b"/>
+  <circle cx="58" cy="81" r="17" fill="#151b24" stroke="#5b9dff" stroke-width="3"/>
+  <circle cx="102" cy="81" r="17" fill="#151b24" stroke="#3ddcb0" stroke-width="3"/>
+  <rect x="40" y="110" width="80" height="7" rx="2" fill="#8a97a8"/>
+  <text x="80" y="38" text-anchor="middle" font-family="ui-monospace, Menlo, monospace" font-size="15" font-weight="700" fill="#5b6878">DEMO</text>
+  <text x="80" y="140" text-anchor="middle" font-family="ui-monospace, Menlo, monospace" font-size="10" fill="#5b6878">fictional data</text>
+</svg>

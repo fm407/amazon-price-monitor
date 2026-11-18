@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}Activity{% endblock %}
+{% block content %}
+<h1 class="h4 mb-3">Activity</h1>
+<section class="card mb-3">
+  <div class="card-header">Alerts</div>
+  <div class="table-responsive"><table class="table table-sm mb-0 align-middle">
+    <thead><tr><th>When</th><th>Product</th><th>Rule</th><th>Type</th><th>Price</th><th>Target</th><th>Reference</th></tr></thead>
+    <tbody>
+      {% for e in events %}
+      <tr><td>{{ localtime(e.created_at) }}</td><td><a href="/products/{{ e.product_id }}">{{ e.product.title|truncate(46) }}</a></td>
+        <td>{{ kind_labels.get(e.rule_kind, e.rule_kind) }}</td><td>{{ e.event_type|replace('_', ' ') }}</td>
+        <td class="num">{{ e.price_minor|money(e.currency) }}</td><td class="num">{{ e.target_minor|money(e.currency) }}</td><td class="num">{{ e.reference_minor|money(e.currency) }}</td></tr>
+      {% else %}<tr><td colspan="7" class="text-secondary">No alerts yet.</td></tr>{% endfor %}
+    </tbody>
+  </table></div>
+</section>
+<section class="card mb-3">
+  <div class="card-header">Notification history</div>
+  <div class="table-responsive"><table class="table table-sm mb-0 align-middle">
+    <thead><tr><th>Created</th><th>Channel</th><th>Status</th><th>Attempts</th><th>Subject</th><th>Last error</th></tr></thead>
+    <tbody>
+      {% for d in deliveries %}
+      <tr><td>{{ localtime(d.created_at) }}</td><td>{{ d.channel|capitalize }}</td>
+        <td><span class="badge text-bg-{{ {'sent': 'success', 'failed': 'danger'}.get(d.status, 'warning') }}">{{ d.status }}</span></td>
+        <td class="num">{{ d.attempts }}</td><td>{{ d.subject|truncate(70) }}</td><td class="text-secondary">{{ d.last_error or '' }}</td></tr>
+      {% else %}<tr><td colspan="6" class="text-secondary">No notifications yet.</td></tr>{% endfor %}
+    </tbody>
+  </table></div>
+</section>
+<section class="card">
+  <div class="card-header">Failed and skipped provider requests</div>
+  <div class="table-responsive"><table class="table table-sm mb-0 align-middle">
+    <thead><tr><th>When</th><th>Provider</th><th>ASIN</th><th>Category</th><th>HTTP</th><th>Detail</th></tr></thead>
+    <tbody>
+      {% for r in failures %}
+      <tr><td>{{ localtime(r.started_at) }}</td><td>{{ r.provider|capitalize }}</td><td class="num">{{ r.asin }}</td><td>{{ r.category }}</td>
+        <td class="num">{{ r.http_status or '' }}</td><td class="text-secondary">{{ r.detail or '' }}</td></tr>
+      {% else %}<tr><td colspan="6" class="text-secondary">No failures recorded.</td></tr>{% endfor %}
+    </tbody>
+  </table></div>
+</section>
+{% endblock %}

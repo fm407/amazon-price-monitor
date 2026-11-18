@@ -1,0 +1,9 @@
+{% if not results %}
+<div class="alert alert-warning py-2 mb-0" role="status">No notification channel is configured.</div>
+{% endif %}
+{% for d in results %}
+<div class="alert alert-{{ 'success' if d.status == 'sent' else 'danger' }} py-2 mb-2" role="status">
+  <strong>{{ d.channel|capitalize }}:</strong>
+  {% if d.status == 'sent' %}test message delivered.{% else %}{{ d.status }}. {{ d.last_error or '' }}{% endif %}
+</div>
+{% endfor %}
