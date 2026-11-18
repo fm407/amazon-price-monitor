@@ -16,6 +16,7 @@
   <img alt="Docker" src="https://img.shields.io/badge/deploy-docker%20compose-2496ed">
   <img alt="Tests" src="https://img.shields.io/badge/tests-335%20passing-2ea44f">
   <img alt="Coverage" src="https://img.shields.io/badge/coverage-95%25-2ea44f">
+  <img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-blue">
 </p>
 
 ![Dashboard in dark mode](docs/images/dashboard-dark.png)
@@ -259,6 +260,13 @@ against mocked HTTP responses. See [docs/STATUS.md](docs/STATUS.md) for the exac
 - Tax is not included.
 - One administrator account. No multi-user support.
 - Configuration changes need a container restart.
+
+## License
+
+Released under the [MIT License](LICENSE).
+
+The bundled front-end libraries keep their own licenses: Bootstrap (MIT), HTMX (0BSD) and
+Chart.js (MIT), in `app/static/vendor/`.
 
 <p align="center"><img src="docs/images/dashboard-light.png" width="80%" alt="Dashboard in light mode"></p>
 <p align="center"><sub>Light theme</sub></p>
