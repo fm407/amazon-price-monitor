@@ -109,7 +109,7 @@ def _parse_amazon_url(url: str) -> ProductIdentity | None:
 
 
 def system_dns_lookup(host: str) -> list[str]:
-    return [info[4][0] for info in socket.getaddrinfo(host, 443, proto=socket.IPPROTO_TCP)]
+    return [str(info[4][0]) for info in socket.getaddrinfo(host, 443, proto=socket.IPPROTO_TCP)]
 
 
 def assert_public_host(host: str, dns_lookup: DnsLookup) -> None:
