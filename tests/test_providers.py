@@ -100,9 +100,7 @@ def test_canopy_timeout_network_and_configuration_errors():
     assert info.value.category == "unsupported_marketplace"
     client = httpx.Client(transport=httpx.MockTransport(lambda r: httpx.Response(200, json=CANOPY_OK)))
     with pytest.raises(ProviderError) as info:
-        CanopyProvider(client, "https://rest.canopyapi.co", "", Decimal("0.01"), 1).fetch_product(
-            "B0EXAMPLE1", "US"
-        )
+        CanopyProvider(client, "https://rest.canopyapi.co", "", Decimal("0.01"), 1).fetch_product("B0EXAMPLE1", "US")
     assert info.value.category == "not_configured"
 
 

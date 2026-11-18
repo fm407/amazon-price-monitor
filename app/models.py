@@ -126,9 +126,7 @@ class AlertEvent(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     product_id: Mapped[int] = mapped_column(ForeignKey("products.id", ondelete="CASCADE"), index=True)
     rule_id: Mapped[int | None] = mapped_column(ForeignKey("alert_rules.id", ondelete="SET NULL"))
-    observation_id: Mapped[int | None] = mapped_column(
-        ForeignKey("price_observations.id", ondelete="SET NULL")
-    )
+    observation_id: Mapped[int | None] = mapped_column(ForeignKey("price_observations.id", ondelete="SET NULL"))
     rule_kind: Mapped[str] = mapped_column(String(25))
     event_type: Mapped[str] = mapped_column(String(15))  # trigger | further_drop | reminder
     price_minor: Mapped[int] = mapped_column(Integer)

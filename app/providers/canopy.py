@@ -62,9 +62,7 @@ class CanopyProvider:
         if not self.configured:
             raise ProviderError("not_configured", "CANOPY_API_KEY is not set")
         if marketplace not in DOMAINS:
-            raise ProviderError(
-                "unsupported_marketplace", f"Canopy does not support marketplace {marketplace}"
-            )
+            raise ProviderError("unsupported_marketplace", f"Canopy does not support marketplace {marketplace}")
         try:
             response = self._client.get(
                 self._url, params={"asin": asin, "domain": marketplace}, headers={"API-KEY": self._api_key}
@@ -72,17 +70,13 @@ class CanopyProvider:
         except httpx.TimeoutException as exc:
             raise ProviderError("timeout", "Canopy request timed out", retryable=True) from exc
         except httpx.HTTPError as exc:
-            raise ProviderError(
-                "network", f"Canopy network error: {type(exc).__name__}", retryable=True
-            ) from exc
+            raise ProviderError("network", f"Canopy network error: {type(exc).__name__}", retryable=True) from exc
         self._raise_for_status(response)
         try:
             body = response.json()
             product = body["data"]["amazonProduct"]
         except (ValueError, KeyError, TypeError) as exc:
-            raise ProviderError(
-                "malformed", "Canopy returned an unexpected response", http_status=200
-            ) from exc
+            raise ProviderError("malformed", "Canopy returned an unexpected response", http_status=200) from exc
         if product is None:
             raise ProviderError("not_found", "Canopy found no product for this ASIN", http_status=200)
         if not isinstance(product, dict):
@@ -108,9 +102,7 @@ class CanopyProvider:
         if status == 404:
             raise ProviderError("not_found", "Canopy found no product for this ASIN", http_status=status)
         if status == 400:
-            raise ProviderError(
-                "invalid_request", "Canopy rejected the request parameters", http_status=status
-            )
+            raise ProviderError("invalid_request", "Canopy rejected the request parameters", http_status=status)
         if status == 429:
             retry_after = parse_retry_after(response.headers.get("retry-after"))
             raise ProviderError(
@@ -120,9 +112,7 @@ class CanopyProvider:
                 http_status=status,
                 retry_after=retry_after,
             )
-        raise ProviderError(
-            "http_error", f"Canopy returned HTTP {status}", retryable=status >= 500, http_status=status
-        )
+        raise ProviderError("http_error", f"Canopy returned HTTP {status}", retryable=status >= 500, http_status=status)
 
     @staticmethod
     def _to_product_data(asin: str, marketplace: str, product: dict[str, Any]) -> ProductData:
