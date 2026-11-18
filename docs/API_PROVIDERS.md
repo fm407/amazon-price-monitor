@@ -200,8 +200,8 @@ EASYPARSER_MAX_MONTHLY_REQUESTS=100
 
 The adapter checks `request_info.success` even when the HTTP status is 200, as the documentation
 requires. Requests use a 75-second timeout because the documentation recommends at least 60.
-Because there is no seller name, a product set to "Amazon as seller only" gets no price from
-Easyparser.
+Because there is no seller name, Easyparser is left out automatically for products set to
+"Amazon as seller only". Those products use the other providers in your list.
 
 ## Scrapingdog
 
@@ -297,7 +297,8 @@ Things to know when several providers serve the same product:
 - Providers can report slightly different prices for the same product at the same moment, for
   example with or without shipping. A switch between providers can look like a small price change.
   Prefer alert thresholds of several percent over very tight ones.
-- A provider that cannot name the seller gives no price for products set to "Amazon as seller only".
+- A provider that never names the seller (Easyparser) is skipped for products set to "Amazon as
+  seller only", so its allowance is not spent on prices that would be rejected.
 - Every observation records its provider, so you can see the source of each point in the history.
 
 How far a free plan goes: requests per month = products x (43,200 / check interval in minutes).

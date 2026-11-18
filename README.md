@@ -14,7 +14,7 @@
   <img alt="FastAPI" src="https://img.shields.io/badge/FastAPI-0.164-009688">
   <img alt="SQLite" src="https://img.shields.io/badge/database-SQLite%20(WAL)-0f6ab4">
   <img alt="Docker" src="https://img.shields.io/badge/deploy-docker%20compose-2496ed">
-  <img alt="Tests" src="https://img.shields.io/badge/tests-224%20passing-2ea44f">
+  <img alt="Tests" src="https://img.shields.io/badge/tests-297%20passing-2ea44f">
   <img alt="Coverage" src="https://img.shields.io/badge/coverage-95%25-2ea44f">
 </p>
 
@@ -47,6 +47,10 @@ You say "tell me at 25% off". When a valid price reaches that target, you get on
     <td align="center"><sub>The same dashboard on a phone</sub></td>
   </tr>
 </table>
+
+![Settings page with five providers and their monthly limits](docs/images/settings-providers.png)
+
+<p align="center"><sub>Settings: the order in which providers are tried, what each has used this month, and its own limit</sub></p>
 
 Each product card shows a **target meter**: how far the price has moved from the baseline toward your target.
 Price movement is always shown with a symbol and a word (`▼ down`, `▲ up`), never with colour alone.
@@ -221,7 +225,7 @@ The reasoning behind each decision is in [docs/ARCHITECTURE.md](docs/ARCHITECTUR
 
 ## Verification status
 
-- 224 automated tests pass on macOS and inside a Linux container. Line coverage is 95%.
+- 297 automated tests pass on macOS and inside a Linux container. Line coverage is 95%.
 - The Docker script builds the image, runs the full alert scenario, restarts and recreates the
   container, and confirms that data and alert state persist.
 - Dependencies are pinned with hashes. The vulnerability audit reports no known issues.

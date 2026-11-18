@@ -19,6 +19,7 @@ class EasyparserProvider(HttpJsonProvider):
     label = "Easyparser"
     URL = "https://realtime.easyparser.com/v1/request"
     timeout = 75.0
+    reports_seller = False
 
     def fetch_product(self, asin: str, marketplace: str) -> ProductData:
         if marketplace not in MARKETPLACES:

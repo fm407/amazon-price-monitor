@@ -297,3 +297,187 @@ def test_three_free_plans_are_used_one_after_another(tmp_path):
             and session.get(Product, first).latest_price_minor == 184999
         )
     ctx.close()
+
+
+# --- Regression tests for the code review findings ---------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("$1,849.99 with 7 percent savings", "1849.99"),
+        ("$20", "20"),
+        ("$1849.5", "1849.5"),
+        ("$1,234,567.00", "1234567.00"),
+        ("€12,99", None),  # decimal comma: would be read 100 times too high
+        ("€1.299,00", None),  # dot as thousands separator: would be read 1000 times too low
+        ("$ 1.299,00", None),
+        ("$10.00 - $20.00", None),  # a range is not one price
+        ("$10.00 to $20.00", None),
+        ("$10.00–$20.00", None),
+        ("$12,99", None),
+        ("$1,84", None),
+        ("$12.999", None),
+        ("$12abc", None),
+    ],
+)
+def test_leading_amount_accepts_only_unambiguous_us_amounts(text, expected):
+    assert leading_amount(text, text[0]) == expected
+
+
+def chain_ctx(tmp_path, handler, **overrides):
+    values = {
+        "provider": "easyparser", "fallback_provider": "scrapingdog", "allow_paid_api_requests": True,
+        "easyparser_api_key": "easyparser-key-AAAA1111", "scrapingdog_api_key": "scrapingdog-key-BBBB2222",
+        "serpapi_api_key": "serpapi-key-CCCC3333", "provider_max_attempts": 1,
+    }  # fmt: skip
+    settings = Settings(
+        _env_file=None, data_dir=tmp_path, scheduler_enabled=False, log_level="WARNING", **{**values, **overrides}
+    )
+    return make_ctx(settings, http=httpx.Client(transport=httpx.MockTransport(handler)))
+
+
+def test_each_provider_receives_its_own_key(tmp_path):
+    seen: dict[str, str] = {}
+    bodies = {
+        "serpapi.com": SERPAPI_OK,
+        "realtime.easyparser.com": EASYPARSER_OK,
+        "api.scrapingdog.com": SCRAPINGDOG_OK,
+    }
+
+    def handler(request):
+        seen[request.url.host] = request.url.params["api_key"]
+        return httpx.Response(200, json=bodies[request.url.host])
+
+    ctx = chain_ctx(tmp_path, handler, provider="serpapi", fallback_provider="easyparser,scrapingdog",
+                    serpapi_max_monthly_requests=1, easyparser_max_monthly_requests=1)  # fmt: skip
+    first = tracked(ctx)
+    with ctx.sessions() as session:
+        others = [Product(asin=f"B0EXAMPLE{i}", title="t", url="https://www.amazon.com/dp/x") for i in (2, 3)]
+        session.add_all(others)
+        session.commit()
+        ids = [first, *(p.id for p in others)]
+    assert [check_product(ctx, pid).provider for pid in ids] == ["serpapi", "easyparser", "scrapingdog"]
+    assert seen == {
+        "serpapi.com": "serpapi-key-CCCC3333",
+        "realtime.easyparser.com": "easyparser-key-AAAA1111",
+        "api.scrapingdog.com": "scrapingdog-key-BBBB2222",
+    }
+    ctx.close()
+
+
+def test_provider_error_text_that_echoes_the_key_is_redacted_before_storage(tmp_path):
+    from app.logging_config import configure_logging
+    from app.models import ProviderRequest
+
+    echo = {
+        "request_info": {
+            "success": False,
+            "status_code": 0,
+            "error_details": [{"message": "Invalid api_key: easyparser-key-AAAA1111"}],
+        }
+    }
+    ctx = chain_ctx(tmp_path, lambda request: httpx.Response(200, json=echo), fallback_provider="")
+    configure_logging("WARNING", ctx.settings.secret_values())
+    pid = tracked(ctx)
+    assert check_product(ctx, pid).status == "error"
+    with ctx.sessions() as session:
+        stored = [session.get(Product, pid).last_error, session.query(ProviderRequest).one().detail]
+    assert all("easyparser-key-AAAA1111" not in text and "***" in text for text in stored), stored
+    configure_logging("WARNING", [])
+    ctx.close()
+
+
+def test_amazon_only_products_skip_providers_that_cannot_name_the_seller(tmp_path):
+    calls: list[str] = []
+    bodies = {"realtime.easyparser.com": EASYPARSER_OK, "api.scrapingdog.com": SCRAPINGDOG_OK}
+
+    def handler(request):
+        calls.append(request.url.host)
+        return httpx.Response(200, json=bodies[request.url.host])
+
+    ctx = chain_ctx(tmp_path, handler)
+    assert provider_chain(ctx, None) == ["easyparser", "scrapingdog"]
+    assert provider_chain(ctx, None, "amazon") == ["scrapingdog"]
+    pid = tracked(ctx, seller_filter="amazon")
+    result = check_product(ctx, pid)
+    assert (result.status, result.provider) == ("ok", "scrapingdog")
+    assert calls == ["api.scrapingdog.com"]  # no Easyparser credit was spent on a price that must be rejected
+    ctx.close()
+
+    (tmp_path / "b").mkdir()
+    only_easyparser = chain_ctx(tmp_path / "b", handler, fallback_provider="")
+    pid = tracked(only_easyparser, seller_filter="amazon")
+    result = check_product(only_easyparser, pid)
+    assert (result.status, result.category) == (
+        "error",
+        "not_configured",
+    ) and "No configured price provider" in result.message
+    assert len(calls) == 1
+    only_easyparser.close()
+
+
+def test_a_real_error_is_not_hidden_by_a_later_quota_skip(tmp_path):
+    def handler(request):
+        if request.url.host == "realtime.easyparser.com":
+            raise httpx.ReadTimeout("slow", request=request)
+        raise AssertionError("Scrapingdog must not be called: its allowance is used up")
+
+    ctx = chain_ctx(tmp_path, handler, scrapingdog_max_monthly_requests=0)
+    pid = tracked(ctx)
+    result = check_product(ctx, pid)
+    assert (result.status, result.category) == ("error", "timeout")  # the timeout, not the skip
+    with ctx.sessions() as session:
+        assert session.get(Product, pid).consecutive_failures == 1
+    ctx.close()
+
+
+def test_quota_skip_outranks_a_missing_key_and_does_not_count_as_a_failure(tmp_path):
+    ctx = chain_ctx(
+        tmp_path, lambda request: httpx.Response(500), easyparser_max_monthly_requests=0, scrapingdog_api_key=""
+    )
+    pid = tracked(ctx)
+    for _ in range(3):
+        result = check_product(ctx, pid)
+        assert (result.status, result.category) == ("skipped", "provider_quota")
+    with ctx.sessions() as session:
+        product = session.get(Product, pid)
+        assert product.consecutive_failures == 0
+        assert (product.next_check_at - ctx.now()).total_seconds() >= 6 * 3600  # normal interval, no fast retry
+    ctx.close()
+
+
+def test_retry_denied_by_the_provider_limit_keeps_the_original_error(tmp_path):
+    calls: list[str] = []
+
+    def handler(request):
+        calls.append(request.url.host)
+        return httpx.Response(503)
+
+    ctx = chain_ctx(tmp_path, handler, fallback_provider="", provider_max_attempts=3, easyparser_max_monthly_requests=1)
+    result = check_product(ctx, tracked(ctx))
+    assert (result.status, result.category) == ("error", "http_error")
+    assert calls == ["realtime.easyparser.com"]  # the second attempt was denied before any request
+    ctx.close()
+
+
+def test_in_flight_and_interrupted_requests_count_toward_a_provider_limit(tmp_path):
+    from app.models import ProviderRequest
+
+    calls: list[str] = []
+
+    def handler(request):
+        calls.append(request.url.host)
+        return httpx.Response(200, json=SCRAPINGDOG_OK)
+
+    ctx = chain_ctx(tmp_path, handler, provider="scrapingdog", fallback_provider="", scrapingdog_max_monthly_requests=2)
+    with ctx.sessions() as session:
+        session.add(ProviderRequest(provider="scrapingdog", asin="B0PENDING1", started_at=ctx.now(), is_paid=True))
+        session.add(ProviderRequest(provider="scrapingdog", asin="B0INTERUP1", started_at=ctx.now(), is_paid=True,
+                                    success=False, category="interrupted"))  # fmt: skip
+        session.add(ProviderRequest(provider="scrapingdog", asin="B0SKIPPED1", started_at=ctx.now(), success=False,
+                                    category="skipped_provider_quota"))  # fmt: skip
+        session.commit()
+    result = check_product(ctx, tracked(ctx))
+    assert (result.status, result.category) == ("skipped", "provider_quota") and calls == []
+    ctx.close()

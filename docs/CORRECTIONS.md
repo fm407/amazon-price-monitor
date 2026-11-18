@@ -77,7 +77,7 @@ Requirement changes are listed in [STATUS.md](STATUS.md), not here.
 | Discovered problem | Two configuration tests failed inside the container although they passed locally. |
 | Root cause | The ignore pattern also matched `.env.example`. |
 | Correction | Added an exception for `.env.example` and copied the file into the test stage. |
-| Verification | 224 tests pass inside the Linux container. |
+| Verification | The full suite passes inside the Linux container. |
 | Prevention | The suite runs in the container as the first step of `scripts/docker_test.sh`. |
 
 ## 8. The Docker script could skip a failed check silently
@@ -138,3 +138,16 @@ No critical or high findings. All of the following were fixed and covered by `te
 | Correction | The backup is opened as immutable, which reads the file as it is. |
 | Verification | Live run: three products, delete one, restore from a read-only mount, three products again. |
 | Prevention | The documented backup and restore commands were executed exactly as written before release. |
+
+## 13. Findings of the code review of the provider limit feature
+
+No critical or high findings. All of the following were fixed before the branch was merged.
+Regression tests are in `tests/test_free_tier_providers.py`.
+
+| Finding | Root cause | Correction |
+|---|---|---|
+| A provider's error message was stored as received. A message that echoed the API key would have reached the database and the dashboard | Redaction covered log lines and notification errors, not stored provider text | Provider error detail and the product's last error are stripped of every configured secret before they are saved |
+| A product set to "Amazon as seller only" spent Easyparser credits on prices that were always rejected, and never moved to the next provider | Easyparser never names the seller, and a rejected price is not a provider failure | Providers declare whether they report the seller. Those that do not are left out of the chain for such products |
+| A "limit reached" skip on a later provider replaced an earlier real error such as a timeout, so the failure was not counted | The last outcome in the chain always won | Outcomes are ranked: a real provider error, then a skip, then "not configured" |
+| The fallback price parser for Scrapingdog could misread a decimal comma, a dot used as thousands separator, or a price range | The pattern accepted any digits after the symbol | Only unambiguous US-style amounts are accepted. Everything else yields no price |
+| A provider without credentials in the chain reserved budget for a request that was never sent | The reservation happened before the configuration check | Unconfigured providers are skipped before anything is reserved |

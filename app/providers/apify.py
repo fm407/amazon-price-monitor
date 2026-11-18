@@ -100,6 +100,7 @@ def _cost(run: dict[str, Any]) -> Decimal | None:
 class ApifyProvider:
     name = "apify"
     is_paid = True
+    reports_seller = True
     max_monthly_requests: int | None = None
     max_monthly_spend_usd: Decimal | None = None
 

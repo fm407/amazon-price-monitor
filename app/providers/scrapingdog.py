@@ -18,15 +18,24 @@ from app.amazon import MARKETPLACES
 from app.providers.base import HttpJsonProvider, ProductData, ProviderError, as_dict, as_text, availability_from_text
 from app.providers.base import resolve_currency as resolve
 
-NUMBER_RE = re.compile(r"\d[\d,]*(?:\.\d+)?")
+# US-style amounts only: 1849.99, 1,849.99 or 20. Anything else is not interpreted.
+AMOUNT_RE = re.compile(r"(\d{1,3}(?:,\d{3})+|\d+)(\.\d{1,2})?(?=\s|$)")
+RANGE_RE = re.compile(r"^\s*(?:-|\u2013|to\b)")
 
 
 def leading_amount(text: object, symbol: str | None) -> str | None:
-    """The number right after the currency symbol at the start of a display string, or None."""
+    """The amount right after the currency symbol at the start of a display string, or None.
+
+    Strict on purpose: a price range, a decimal comma or any other format returns None, so a
+    misread number can never become a stored price.
+    """
     if not isinstance(text, str) or not symbol or not text.strip().startswith(symbol):
         return None
-    match = NUMBER_RE.match(text.strip()[len(symbol) :].lstrip())
-    return match.group(0).replace(",", "") if match else None
+    rest = text.strip()[len(symbol) :]
+    match = AMOUNT_RE.match(rest)
+    if not match or RANGE_RE.match(rest[match.end() :]):
+        return None
+    return match.group(0).replace(",", "")
 
 
 class ScrapingdogProvider(HttpJsonProvider):

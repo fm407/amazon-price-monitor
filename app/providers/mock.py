@@ -23,6 +23,7 @@ class MockProvider:
     cost_per_request_usd = Decimal(0)
     max_concurrency = 4
     configured = True
+    reports_seller = True
     max_monthly_requests: int | None = None
     max_monthly_spend_usd: Decimal | None = None
 

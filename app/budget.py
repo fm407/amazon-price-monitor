@@ -17,6 +17,7 @@ from sqlalchemy.orm import Session
 from app import notify
 from app.config import Settings
 from app.context import AppContext
+from app.logging_config import redact
 from app.models import ApplicationSetting, ProviderRequest
 from app.money import micro_to_usd, usd_to_micro
 from app.providers.base import PriceProvider
@@ -180,7 +181,7 @@ def finalize(
         "category": category,
         "http_status": http_status,
         "duration_ms": duration_ms,
-        "detail": detail[:300] if detail else None,
+        "detail": redact(detail)[:300] if detail else None,  # provider text may echo a credential
     }
     if actual_cost_usd is not None:
         values["actual_cost_micro"] = usd_to_micro(actual_cost_usd)

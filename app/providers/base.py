@@ -62,6 +62,7 @@ class PriceProvider(Protocol):
     # Optional per-provider monthly limits, for example to stay inside a free plan.
     max_monthly_requests: int | None
     max_monthly_spend_usd: Decimal | None
+    reports_seller: bool  # False when the provider never names the seller
 
     @property
     def configured(self) -> bool: ...
@@ -123,6 +124,7 @@ class HttpJsonProvider:
     max_concurrency = 2
     max_monthly_requests: int | None = None
     max_monthly_spend_usd: Decimal | None = None
+    reports_seller = True
     timeout: float | None = None  # None = the shared client's timeout
 
     def __init__(self, client: httpx.Client, api_key: str, cost_per_request_usd: Decimal) -> None:
