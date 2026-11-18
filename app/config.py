@@ -9,8 +9,8 @@ from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 SECRETS_DIR = Path("/run/secrets")
-PROVIDER_NAMES = ("mock", "canopy", "apify")
-PAID_PROVIDERS = ("canopy", "apify")
+PAID_PROVIDERS = ("canopy", "apify", "serpapi", "easyparser", "scrapingdog")
+PROVIDER_NAMES = ("mock", *PAID_PROVIDERS)
 MIN_SECRET_LENGTH = 32
 DISCORD_HOSTS = ("discord.com", "discordapp.com", "ptb.discord.com", "canary.discord.com")
 
@@ -58,6 +58,24 @@ class Settings(BaseSettings):
     apify_max_monthly_requests: int | None = Field(default=None, ge=0)
     apify_max_monthly_spend_usd: Decimal | None = Field(default=None, ge=0)  # e.g. 5.00 for the free plan credit
 
+    # SerpApi
+    serpapi_api_key: str = ""
+    serpapi_cost_per_request_usd: Decimal = Decimal("0.01")
+    serpapi_max_monthly_requests: int | None = Field(default=None, ge=0)
+    serpapi_max_monthly_spend_usd: Decimal | None = Field(default=None, ge=0)
+
+    # Easyparser
+    easyparser_api_key: str = ""
+    easyparser_cost_per_request_usd: Decimal = Decimal("0.01")
+    easyparser_max_monthly_requests: int | None = Field(default=None, ge=0)
+    easyparser_max_monthly_spend_usd: Decimal | None = Field(default=None, ge=0)
+
+    # Scrapingdog
+    scrapingdog_api_key: str = ""
+    scrapingdog_cost_per_request_usd: Decimal = Decimal("0.01")
+    scrapingdog_max_monthly_requests: int | None = Field(default=None, ge=0)
+    scrapingdog_max_monthly_spend_usd: Decimal | None = Field(default=None, ge=0)
+
     # Cost controls
     allow_paid_api_requests: bool = False
     max_monthly_api_spend_usd: Decimal = Decimal("5.00")
@@ -88,6 +106,12 @@ class Settings(BaseSettings):
         "canopy_max_monthly_spend_usd",
         "apify_max_monthly_requests",
         "apify_max_monthly_spend_usd",
+        "serpapi_max_monthly_requests",
+        "serpapi_max_monthly_spend_usd",
+        "easyparser_max_monthly_requests",
+        "easyparser_max_monthly_spend_usd",
+        "scrapingdog_max_monthly_requests",
+        "scrapingdog_max_monthly_spend_usd",
         mode="before",
     )
     @classmethod
@@ -165,6 +189,9 @@ class Settings(BaseSettings):
             self.api_token,
             self.canopy_api_key,
             self.apify_token,
+            self.serpapi_api_key,
+            self.easyparser_api_key,
+            self.scrapingdog_api_key,
             self.discord_webhook_url,
             self.discord_webhook_url.rstrip("/").rsplit("/", 1)[-1],  # the token part alone
             self.smtp_password,
