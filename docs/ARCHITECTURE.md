@@ -45,6 +45,7 @@ All state is in one SQLite database on a Docker volume.
 | `security.py` | Password hashing, sessions, CSRF, throttling, setup token, headers. |
 | `api.py`, `schemas.py` | REST routes and their request and response models. |
 | `web.py`, `templates/`, `static/` | Dashboard. |
+| `chart.py` | Price history chart as a PNG image for alert messages (Pillow). |
 | `backup.py` | Online backup, retention, restore. Scheduled from the scheduler tick. |
 | `demo.py` | Demo data for mock mode. |
 | `main.py` | Application factory, middleware, error handlers, lifecycle. |

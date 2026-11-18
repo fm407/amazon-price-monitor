@@ -101,6 +101,8 @@ Generate a token with `openssl rand -hex 32`.
 | `SMTP_PASSWORD` | empty | SMTP password. Secret. |
 | `SMTP_FROM` | empty | Sender address. |
 | `SMTP_TO` | empty | Recipient address. |
+| `ALERT_CHART_ENABLED` | `true` | Attach a price history chart to each alert (Discord and email). |
+| `ALERT_CHART_DAYS` | `30` | Days of history shown in the chart. |
 | `NOTIFY_MOCK_ENABLED` | on in mock mode | Records notifications in the dashboard instead of sending them. |
 
 ## Secrets from files

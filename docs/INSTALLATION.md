@@ -5,7 +5,7 @@ This guide takes a fresh Ubuntu server with Docker installed to a running dashbo
 ## Requirements
 
 - Docker Engine 24 or newer with the Compose plugin (`docker compose version` prints a version).
-- About 400 MB of disk space for the image and a few megabytes for data.
+- About 450 MB of disk space for the image and a few megabytes for data.
 - Outbound HTTPS access. No inbound access from the internet is needed.
 
 ## 1. Get the code

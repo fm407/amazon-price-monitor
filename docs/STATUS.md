@@ -16,6 +16,7 @@ Last updated: 2026-11-18. Version 1.0.0.
 | 8 | Security hardening, Docker verification, documentation | `milestone-8-hardening-docs` | merged |
 | 9 | Per-provider monthly limits, ordered fallback list, SerpApi, Easyparser and Scrapingdog | `feature-per-provider-quotas` | merged |
 | 10 | Provider test action, confirmation of large drops, pacing, back-in-stock alerts, scheduled backups | `feature-trust-and-ops` | merged |
+| 11 | Price history chart in Discord and email alerts | `feature-alert-charts` | merged |
 
 Each milestone was developed on its own branch and merged into `main` with a merge commit after
 `scripts/check.sh` passed. The repository has one maintainer, so merges were verified locally
@@ -67,7 +68,7 @@ Verified means: exercised by an automated test or by the Docker script on 2026-1
 | Container restarts preserve data | verified | Docker script |
 | Health checks work | verified | Docker script |
 | No secrets exposed | verified | `test_system_endpoints_never_expose_secrets`, log checks |
-| Automated tests pass | verified | 323 passed locally and in the container |
+| Automated tests pass | verified | 330 passed locally and in the container |
 | Documentation complete | done | This folder |
 
 ## Awaiting live verification
@@ -87,7 +88,7 @@ tested against mocked HTTP responses, but it has not talked to the real services
 | Easyparser DETAIL request | Real envelope fields (`request_info.success`), price and currency | Same procedure |
 | Scrapingdog product request | Real field names, and its error statuses, which the documentation does not list | Same procedure |
 | Free plan sizes | The allowances in the documentation were read from the providers' pricing pages on 2026-11-18. Canopy's was not confirmed on its own page | Check each provider's dashboard |
-| Discord delivery | A real webhook accepts the embed. The image thumbnail renders | Press "Send test notification", then trigger one alert |
+| Discord delivery | A real webhook accepts the embed and the uploaded chart (`multipart/form-data` with `payload_json` and `files[0]`). The chart shows inside the alert. The product thumbnail renders | Press "Send test notification", then trigger one alert |
 | SMTP delivery | Your mail server accepts the message | Configure SMTP and press "Send test notification" |
 | Short-link resolution | `a.co` and `amzn.to` redirect chains end on a product page through allowed hosts only | Add a product with a short link |
 
@@ -111,7 +112,7 @@ format was taken from Discord's official documentation repository on GitHub inst
 - Canopy spend is always an estimate.
 - Changing configuration needs a restart. There is no settings editor in the dashboard.
 - One administrator account.
-- The image is about 300 MB, of which about 200 MB is the Python base image.
+- The image is about 330 MB, of which about 200 MB is the Python base image.
 - Screenshots were taken with Chrome only. Firefox and Safari were not tested.
 
 ## Not built in this release

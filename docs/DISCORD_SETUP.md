@@ -59,6 +59,24 @@ The embed title links to the Amazon product page. The product image is shown as 
 provider supplies one. Values the provider did not supply are shown as `unknown`.
 Product titles are escaped, and mentions such as `@everyone` are disabled.
 
+### Price history chart
+
+Each alert includes a chart of the product's price history, drawn by the application itself:
+the stored prices of the last 30 days, the baseline as a grey dashed line, the target as a green
+dashed line and the latest price in the top right corner. In Discord the chart appears inside the
+alert. In email it is an attachment.
+
+| Setting | Default | Meaning |
+|---|---|---|
+| `ALERT_CHART_ENABLED` | `true` | Set `false` to send alerts without a chart. |
+| `ALERT_CHART_DAYS` | `30` | Days of history shown. At most the latest 500 prices are drawn. |
+
+- A chart needs at least two stored prices. The first alert of a brand-new product may come without one.
+- If the chart cannot be drawn, or Discord does not accept the upload, the alert is sent without it.
+  An alert is never held back because of the chart.
+- The test notification has no chart.
+- The chart shows prices and dates only. Product titles are not drawn into the image.
+
 ### Delivery and retries
 
 - An alert and its deliveries are saved in the database before anything is sent.
