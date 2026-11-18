@@ -105,6 +105,8 @@ class Settings(BaseSettings):
     smtp_from: str = ""
     smtp_to: str = ""
     notify_mock_enabled: bool | None = None  # default: on when PROVIDER=mock
+    alert_chart_enabled: bool = True  # attach a price history chart to alert messages
+    alert_chart_days: int = Field(default=30, ge=1, le=3650)
 
     @field_validator(
         "apify_max_charge_per_run_usd",

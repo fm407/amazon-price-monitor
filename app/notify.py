@@ -6,6 +6,7 @@ Delivery then runs under one lock, so a message is never sent twice.
 
 from __future__ import annotations
 
+import json
 import logging
 import re
 import smtplib
@@ -18,6 +19,7 @@ import httpx
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.chart import render_price_chart
 from app.config import Settings
 from app.logging_config import redact
 from app.models import AlertEvent, AlertRule, NotificationDelivery, PriceObservation, Product
@@ -34,6 +36,8 @@ RETRY_BASE_SECONDS = 60.0
 DISCORD_TITLE_LIMIT = 256
 DISCORD_DESCRIPTION_LIMIT = 4096
 DISCORD_COLOR = 0x2ECC71
+CHART_FILENAME = "price-history.png"
+CHART_MAX_POINTS = 500
 MARKDOWN_RE = re.compile(r"([\\*_~`|>\[\]()#-])")
 HEADLINES = {"trigger": "PRICE DROP ALERT", "further_drop": "PRICE DROPPED FURTHER", "reminder": "PRICE STILL LOW"}
 AVAILABILITY = {"in_stock": "In stock", "out_of_stock": "Out of stock"}
@@ -50,7 +54,7 @@ class NotifyError(Exception):
 class Notifier(Protocol):
     name: str
 
-    def send(self, delivery: NotificationDelivery) -> None: ...
+    def send(self, delivery: NotificationDelivery, chart: bytes | None = None) -> None: ...
 
 
 class MockNotifier:
@@ -60,9 +64,11 @@ class MockNotifier:
 
     def __init__(self) -> None:
         self.sent: list[str] = []
+        self.charts: list[bytes | None] = []
 
-    def send(self, delivery: NotificationDelivery) -> None:
+    def send(self, delivery: NotificationDelivery, chart: bytes | None = None) -> None:
         self.sent.append(delivery.body)
+        self.charts.append(chart)
         log.info("mock notification delivered", extra={"subject": delivery.subject})
 
 
@@ -81,7 +87,7 @@ class DiscordNotifier:
         return MARKDOWN_RE.sub(r"\\\1", text)
 
     @classmethod
-    def payload(cls, delivery: NotificationDelivery) -> dict[str, object]:
+    def payload(cls, delivery: NotificationDelivery, with_chart: bool = False) -> dict[str, object]:
         headline, _, rest = delivery.body.partition("\n")
         embed: dict[str, object] = {
             "title": headline[:DISCORD_TITLE_LIMIT],
@@ -93,12 +99,32 @@ class DiscordNotifier:
         if delivery.image_url and delivery.image_url.startswith("https://"):
             embed["thumbnail"] = {"url": delivery.image_url}
         # allowed_mentions with an empty parse list: text such as @everyone never pings anyone.
-        return {"username": "Price Monitor", "embeds": [embed], "allowed_mentions": {"parse": []}}
+        payload: dict[str, object] = {"username": "Price Monitor", "embeds": [embed], "allowed_mentions": {"parse": []}}
+        if with_chart:
+            # The uploaded file is shown inside the embed through the documented attachment:// reference.
+            embed["image"] = {"url": f"attachment://{CHART_FILENAME}"}
+            payload["attachments"] = [{"id": 0, "filename": CHART_FILENAME}]
+        return payload
 
-    def send(self, delivery: NotificationDelivery) -> None:
+    def _post(self, delivery: NotificationDelivery, chart: bytes | None) -> httpx.Response:
+        # wait=true makes Discord confirm that the message was stored instead of returning 204 blindly.
+        params = {"wait": "true"}
+        if chart is None:
+            return self._client.post(self._url, params=params, json=self.payload(delivery))
+        return self._client.post(
+            self._url,
+            params=params,
+            data={"payload_json": json.dumps(self.payload(delivery, with_chart=True))},
+            files={"files[0]": (CHART_FILENAME, chart, "image/png")},
+        )
+
+    def send(self, delivery: NotificationDelivery, chart: bytes | None = None) -> None:
         try:
-            # wait=true makes Discord confirm that the message was stored instead of returning 204 blindly.
-            response = self._client.post(self._url, params={"wait": "true"}, json=self.payload(delivery))
+            response = self._post(delivery, chart)
+            if chart is not None and response.status_code in (400, 413, 415):
+                # Discord did not accept the upload. The alert matters more than the picture.
+                log.warning("discord rejected the chart upload; sending the alert without it")
+                response = self._post(delivery, None)
         except httpx.TimeoutException as exc:
             raise NotifyError("Discord request timed out", retryable=True) from exc
         except httpx.HTTPError as exc:
@@ -128,13 +154,15 @@ class EmailNotifier:
     def __init__(self, settings: Settings) -> None:
         self._settings = settings
 
-    def send(self, delivery: NotificationDelivery) -> None:
+    def send(self, delivery: NotificationDelivery, chart: bytes | None = None) -> None:
         cfg = self._settings
         message = EmailMessage()
         message["Subject"] = delivery.subject
         message["From"] = cfg.smtp_from
         message["To"] = cfg.smtp_to
         message.set_content(delivery.body + (f"\n\n{delivery.link_url}" if delivery.link_url else ""))
+        if chart is not None:
+            message.add_attachment(chart, maintype="image", subtype="png", filename=CHART_FILENAME)
         timeout = cfg.http_timeout_seconds
         try:
             smtp: smtplib.SMTP
@@ -283,11 +311,37 @@ def queue_alert(
     )
 
 
-def _attempt(ctx: AppContext, session: Session, delivery: NotificationDelivery) -> None:
+def chart_for_event(ctx: AppContext, session: Session, event_id: int | None) -> bytes | None:
+    """The price history chart for an alert, or None. A chart problem never blocks the alert."""
+    if not ctx.settings.alert_chart_enabled or event_id is None:
+        return None
+    try:
+        event = session.get(AlertEvent, event_id)
+        if event is None:
+            return None
+        since = ctx.now() - timedelta(days=ctx.settings.alert_chart_days)
+        rows = session.execute(
+            select(PriceObservation.observed_at, PriceObservation.price_minor)
+            .where(PriceObservation.product_id == event.product_id, PriceObservation.observed_at >= since)
+            .order_by(PriceObservation.observed_at.desc(), PriceObservation.id.desc())
+            .limit(CHART_MAX_POINTS)
+        ).all()
+        if len(rows) < 2:
+            return None  # one point is not a history
+        points = [(moment, price) for moment, price in reversed(rows)]
+        product = session.get(Product, event.product_id)
+        baseline = product.baseline_minor if product else None
+        return render_price_chart(points, event.currency, ctx.settings.tz, baseline, event.target_minor)
+    except Exception:
+        log.exception("could not render the alert chart", extra={"event_id": event_id})
+        return None
+
+
+def _attempt(ctx: AppContext, session: Session, delivery: NotificationDelivery, chart: bytes | None = None) -> None:
     now = ctx.now()
     delivery.attempts += 1
     try:
-        ctx.notifiers[delivery.channel].send(delivery)
+        ctx.notifiers[delivery.channel].send(delivery, chart)
     except NotifyError as err:
         delivery.last_error = redact(err.message)[:500]
         if err.retryable and delivery.attempts < MAX_ATTEMPTS:
@@ -320,9 +374,12 @@ def deliver_pending(ctx: AppContext) -> int:
             )
             .order_by(NotificationDelivery.id)
         ).all()
+        charts: dict[int | None, bytes | None] = {}  # one rendering per alert, shared by its channels
         for delivery in due:
             if delivery.channel in ctx.notifiers:
-                _attempt(ctx, session, delivery)
+                if delivery.event_id not in charts:
+                    charts[delivery.event_id] = chart_for_event(ctx, session, delivery.event_id)
+                _attempt(ctx, session, delivery, charts[delivery.event_id])
         return len(due)
 
 
