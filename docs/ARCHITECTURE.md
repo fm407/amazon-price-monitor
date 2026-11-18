@@ -45,6 +45,7 @@ All state is in one SQLite database on a Docker volume.
 | `security.py` | Password hashing, sessions, CSRF, throttling, setup token, headers. |
 | `api.py`, `schemas.py` | REST routes and their request and response models. |
 | `web.py`, `templates/`, `static/` | Dashboard. |
+| `backup.py` | Online backup, retention, restore. Scheduled from the scheduler tick. |
 | `demo.py` | Demo data for mock mode. |
 | `main.py` | Application factory, middleware, error handlers, lifecycle. |
 
@@ -70,6 +71,9 @@ application needs. Tests build a context with a fake clock, a no-op sleep and mo
 5. **Normalize.** Reject out-of-stock, missing, zero, negative, non-numeric, wrong-currency,
    used-condition and filtered-seller results. A rejected result changes nothing except the
    "last check" message.
+5a. **Confirm (optional).** With `CONFIRM_DROP_PERCENT` set, a price far below the last stored one is
+   held on the product (`pending_price_minor`) and a second check is scheduled, preferably with a
+   different provider. Only a second large drop is recorded.
 6. **Record** the observation and update latest, previous, lowest and highest price. The first valid
    price sets the baseline.
 7. **Evaluate** every enabled alert rule. Save alert events and their pending deliveries.
@@ -127,7 +131,7 @@ To scale beyond one process, these locks would have to move into the database (f
 ## Alert engine
 
 Rule kinds: `pct_below_baseline`, `fixed_target`, `pct_below_average`, `new_low`,
-`pct_drop_since_last`.
+`pct_drop_since_last`, `back_in_stock`.
 
 Threshold rules (the first three) keep an `is_below` flag:
 
@@ -137,7 +141,8 @@ Threshold rules (the first three) keep an `is_below` flag:
 | below | still at or below | Nothing, or a reminder, or a further-drop alert if configured |
 | below | above target | Flag cleared. The rule can alert again. |
 
-Event rules (`new_low`, `pct_drop_since_last`) alert on each occurrence, limited by the cooldown.
+Event rules (`new_low`, `pct_drop_since_last`, `back_in_stock`) alert on each occurrence, limited by
+the cooldown. `back_in_stock` needs a check that reported out of stock followed by a valid in-stock price.
 The average rule stays inactive until five earlier observations exist in its lookback window.
 
 Duplicate protection has three layers: the state flag, a unique database constraint on

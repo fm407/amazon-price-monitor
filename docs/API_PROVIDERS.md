@@ -17,6 +17,20 @@ You can combine several providers and their free plans. See "Using several free 
 
 Each stored price records which provider supplied it.
 
+## Test a provider
+
+After you set a key, check it before you rely on it.
+
+1. Open **Settings**.
+2. Under *Test a provider*, choose the provider and paste an Amazon link or ASIN.
+3. Press **Send one test request**.
+
+The result shows the title, price, currency, shipping, seller, condition and availability exactly as
+the provider returned them, and whether the application would record that price. Compare it with the
+Amazon page. Nothing is saved. The request counts against the limits like any other.
+
+The same test is available as `POST /api/v1/providers/{name}/test` with `{"input": "<link or ASIN>"}`.
+
 ## Mock mode (no credentials)
 
 ```ini
@@ -291,6 +305,30 @@ Rules:
 - **Settings** shows, per provider, the requests and cost used this month and its limit.
 - Check your free plan's real numbers in the provider's dashboard. Free plans change.
 - Set the limit a little below the plan's allowance if you also use the key elsewhere.
+
+### Pacing
+
+With `PACE_MONTHLY_LIMITS=true` (the default), a provider's monthly limit is not used up in the first
+days. At any moment a provider may have used the elapsed share of the month plus 10% of its limit.
+A provider that is ahead of that pace hands over to the next one and is used again as the month goes
+on. Example: with a limit of 250, about 25 requests are available on the first day and about 8 more
+each day after that. Set `PACE_MONTHLY_LIMITS=false` to use each limit as fast as checks arrive.
+
+When every provider is at its limit or ahead of its pace, the check is skipped and recorded once
+under **Activity**. It runs again at its next scheduled time.
+
+### Confirming large drops
+
+With `CONFIRM_DROP_PERCENT=15`, a price that is 15% or more below the last stored price is not
+recorded at once. It is held, and a second check runs after `CONFIRM_RECHECK_MINUTES` (15 by
+default), from a different provider when one is available.
+
+- If the second reading is also a large drop, it is recorded and alerts are evaluated as usual.
+- If the second reading is normal, the held value is discarded. No alert is sent.
+
+The product page shows "Waiting for confirmation" while a value is held. The cost is one extra
+request per large drop and a delay of a few minutes for real deals. The first price of a new
+product is never held.
 
 Things to know when several providers serve the same product:
 

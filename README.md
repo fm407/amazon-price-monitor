@@ -28,12 +28,15 @@ You say "tell me at 25% off". When a valid price reaches that target, you get on
 | | |
 |---|---|
 | **Track anything on amazon.com** | Product links, short links (`a.co`, `amzn.to`) or a bare ASIN. Tracking parameters are removed. |
-| **Five alert types** | Percent below baseline, fixed target price, percent below the historical average, new historical low, percent drop since the last check. |
+| **Six alert types** | Percent below baseline, fixed target price, percent below the historical average, new historical low, percent drop since the last check, back in stock. |
 | **No alert spam** | One alert when the price crosses the target. Silence while it stays there. A fresh alert after it recovers and drops again. Optional reminders and further-drop alerts. |
 | **Accurate prices only** | Missing, zero, negative, wrong-currency, out-of-stock and used-offer prices never update history and never trigger alerts. Shipping is added when known and marked unknown when not. |
+| **Second opinion on big drops** | Optionally, a sudden large drop is held until a second check, preferably from another provider, agrees. One odd reading never sends an alert. |
 | **Hard spending limits** | Paid API calls are off until you enable them. Monthly budget and daily request limits are enforced before every call and survive restarts. |
 | **Six price sources** | SerpApi, Easyparser, Scrapingdog, Apify, Canopy API, and a built-in mock provider that needs no account. |
-| **Free plans, combined** | Give each provider its own monthly limit. When one free plan is used up, the next provider takes over automatically. |
+| **Free plans, combined** | Give each provider its own monthly limit. Usage is spread over the month, and when one provider is at its limit the next one takes over. |
+| **Test before you trust** | The Settings page sends one test request to any provider and shows exactly what came back and how it would be used. |
+| **Automatic backups** | A daily database backup inside the data volume, with the last seven kept. |
 | **Notifications** | Discord webhook (no bot needed), optional SMTP email. Every delivery is recorded and retried on temporary errors. |
 | **Private by default** | Binds to `127.0.0.1`. Single-user login, CSRF protection, strict Content Security Policy, no telemetry, no third-party scripts. |
 
@@ -125,7 +128,11 @@ ALLOW_PAID_API_REQUESTS=true
 MAX_MONTHLY_API_SPEND_USD=5.00
 MAX_DAILY_API_REQUESTS=100
 DEFAULT_CHECK_INTERVAL_MINUTES=360
+CONFIRM_DROP_PERCENT=15              # recommended when you use more than one provider
 ```
+
+Then open **Settings**, choose a provider under *Test a provider*, paste an Amazon link and press
+**Send one test request**. You see the price, seller and stock the provider returned.
 
 **3. Connect Discord**
 
@@ -182,7 +189,8 @@ The **Settings** page shows how much of each provider's allowance is used.
 | Logs | `docker compose logs -f app` |
 | Health | `docker compose ps` or `curl -s http://127.0.0.1:8080/api/v1/health` |
 | Update | `git pull && docker compose up -d --build` |
-| Back up | `docker compose exec app python -m app backup` then `docker compose cp app:/app/data/backups ./` |
+| Back up now | `docker compose exec app python -m app backup` |
+| Copy backups to the host | `docker compose cp app:/app/data/backups ./` |
 | Lost password | `docker compose exec app python -m app reset-admin && docker compose restart app` |
 | Run all checks | `./scripts/docker_test.sh` |
 
