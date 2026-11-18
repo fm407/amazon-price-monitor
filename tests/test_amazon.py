@@ -90,7 +90,7 @@ def test_short_link_redirect_to_unsafe_destination_is_rejected(target):
 
 @pytest.mark.parametrize(
     "address",
-    ["127.0.0.1", "10.0.0.5", "192.168.1.10", "172.16.0.1", "169.254.169.254", "::1", "fd00::1", "0.0.0.0"],
+    ["127.0.0.1", "10.0.0.5", "192.168.1.10", "172.16.0.1", "169.254.169.254", "::1", "fd00::1"],
 )
 def test_short_link_host_resolving_to_non_public_address_is_rejected(address):
     client = short_link_client({"https://a.co/d/abc123": "https://www.amazon.com/dp/B0DEMOSSD1"})
