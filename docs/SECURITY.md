@@ -28,6 +28,7 @@ password, and the integrity of prices and alerts.
 | Headers | `Content-Security-Policy`, `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`, `Permissions-Policy`, `Cross-Origin-Opener-Policy`, `Cache-Control: no-store`. |
 | Error handling | Clients get a generic message and a request ID. Details go to the log. Validation errors name the field, not the submitted value. |
 | Secrets | Read from the environment or `/run/secrets`. Never stored in the database, never returned by the API, never shown in the dashboard. |
+| Stored error text | Provider and delivery error messages are stripped of every configured secret value before they are saved. |
 | Logging | Every configured secret value is removed from each log line before it is written. HTTP client logging of request URLs is disabled, because the Discord URL contains its token. |
 | Outbound text | Discord messages escape markdown and disable mentions. CSV exports neutralise spreadsheet formulas. Titles are stored as one line. |
 | Container | Non-root user, read-only root filesystem, all capabilities dropped, `no-new-privileges`, memory and process limits. No host network, no privileged mode, no Docker socket. |
@@ -39,7 +40,7 @@ Last run: 2026-11-18.
 
 | Check | Command | Result |
 |---|---|---|
-| Automated tests, including security tests | `./scripts/check.sh` | 224 passed |
+| Automated tests, including security tests | `./scripts/check.sh` | 297 passed |
 | Security lint rules (bandit rule set) | `ruff check .` | no findings |
 | Known vulnerabilities in dependencies | `pip-audit -r requirements.txt --disable-pip` | none found |
 | Container properties | `./scripts/docker_test.sh` | non-root, read-only filesystem, private secret files, token absent from logs |

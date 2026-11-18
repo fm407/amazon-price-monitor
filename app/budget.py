@@ -17,6 +17,7 @@ from sqlalchemy.orm import Session
 from app import notify
 from app.config import Settings
 from app.context import AppContext
+from app.logging_config import redact
 from app.models import ApplicationSetting, ProviderRequest
 from app.money import micro_to_usd, usd_to_micro
 from app.providers.base import PriceProvider
@@ -27,6 +28,7 @@ DENIAL_MESSAGES = {
     "paid_disabled": "Paid API requests are disabled (ALLOW_PAID_API_REQUESTS=false).",
     "monthly_budget": "The monthly API budget is exhausted.",
     "daily_limit": "The daily API request limit is reached.",
+    "provider_quota": "This provider's own monthly limit is reached.",
     "provider_blocked": "The provider is temporarily paused after an authentication, quota or rate-limit error.",
 }
 _BILLED = func.coalesce(ProviderRequest.actual_cost_micro, ProviderRequest.estimated_cost_micro)
@@ -99,6 +101,27 @@ def _denial(current: Usage, cost_micro: int) -> str | None:
     return None
 
 
+def provider_month(session: Session, name: str, now: datetime) -> tuple[int, int]:
+    """(requests, billed micro-dollars) for one provider in the current month."""
+    where = (ProviderRequest.provider == name) & (ProviderRequest.started_at >= month_start(now)) & _REAL
+    count, billed = session.execute(select(func.count(), func.coalesce(func.sum(_BILLED), 0)).where(where)).one()
+    return count, int(billed or 0)
+
+
+def _provider_denial(session: Session, provider: PriceProvider, now: datetime, cost_micro: int) -> str | None:
+    """A provider's own monthly limit. Unlike the global limits, it lets the next provider take over."""
+    if provider.max_monthly_requests is None and provider.max_monthly_spend_usd is None:
+        return None
+    count, billed = provider_month(session, provider.name, now)
+    if provider.max_monthly_requests is not None and count >= provider.max_monthly_requests:
+        return "provider_quota"
+    if provider.max_monthly_spend_usd is not None and billed + cost_micro > usd_to_micro(
+        provider.max_monthly_spend_usd
+    ):
+        return "provider_quota"
+    return None
+
+
 def record_skip(ctx: AppContext, provider: PriceProvider, product_id: int | None, asin: str, reason: str) -> None:
     with ctx.sessions() as session:
         session.add(
@@ -123,6 +146,8 @@ def reserve(
     cost_micro = usd_to_micro(provider.cost_per_request_usd) if provider.is_paid else 0
     with ctx.budget_lock, ctx.sessions() as session:
         reason = _denial(usage(session, ctx.settings, ctx.now()), cost_micro) if provider.is_paid else None
+        if reason is None:
+            reason = _provider_denial(session, provider, ctx.now(), cost_micro)
         if reason is None:
             request = ProviderRequest(
                 provider=provider.name,
@@ -156,7 +181,7 @@ def finalize(
         "category": category,
         "http_status": http_status,
         "duration_ms": duration_ms,
-        "detail": detail[:300] if detail else None,
+        "detail": redact(detail)[:300] if detail else None,  # provider text may echo a credential
     }
     if actual_cost_usd is not None:
         values["actual_cost_micro"] = usd_to_micro(actual_cost_usd)

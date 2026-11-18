@@ -23,7 +23,13 @@ import httpx
 
 from app.amazon import MARKETPLACES, canonical_url
 from app.money import InvalidAmount, parse_amount
-from app.providers.base import AUTH_BLOCK_SECONDS, ProductData, ProviderError, parse_retry_after
+from app.providers.base import (
+    AUTH_BLOCK_SECONDS,
+    ProductData,
+    ProviderError,
+    parse_retry_after,
+    resolve_currency,
+)
 
 WAIT_SECONDS = 60
 IN_PROGRESS = {"READY", "RUNNING", "TIMING-OUT", "ABORTING"}
@@ -41,18 +47,6 @@ DEFAULT_FIELD_MAP = {
     "in_stock": "inStock",
     "condition": "",
 }
-
-
-# Some Actors report a currency symbol instead of an ISO code. A symbol is accepted only when it is
-# the symbol of the marketplace's own currency; anything else stays unknown and the price is rejected.
-SYMBOL_CURRENCIES = {"$": {"USD", "CAD", "AUD", "MXN"}, "£": {"GBP"}, "€": {"EUR"}, "¥": {"JPY"}}
-
-
-def resolve_currency(value: str | None, marketplace: str) -> str | None:
-    if value and value in SYMBOL_CURRENCIES:
-        expected = MARKETPLACES[marketplace].currency
-        return expected if expected in SYMBOL_CURRENCIES[value] else None
-    return value
 
 
 class ApifyConfigError(ValueError):
@@ -106,6 +100,9 @@ def _cost(run: dict[str, Any]) -> Decimal | None:
 class ApifyProvider:
     name = "apify"
     is_paid = True
+    reports_seller = True
+    max_monthly_requests: int | None = None
+    max_monthly_spend_usd: Decimal | None = None
 
     def __init__(
         self,

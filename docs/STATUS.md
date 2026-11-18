@@ -14,6 +14,7 @@ Last updated: 2026-11-18. Version 1.0.0.
 | 6 | Web dashboard, REST API, charts, demo mode | `milestone-6-dashboard-api` | merged |
 | 7 | Apify, fallback, cost controls | `milestone-7-apify-cost-controls` | merged |
 | 8 | Security hardening, Docker verification, documentation | `milestone-8-hardening-docs` | merged |
+| 9 | Per-provider monthly limits, ordered fallback list, SerpApi, Easyparser and Scrapingdog | `feature-per-provider-quotas` | merged |
 
 Each milestone was developed on its own branch and merged into `main` with a merge commit after
 `scripts/check.sh` passed. The repository has one maintainer, so merges were verified locally
@@ -65,7 +66,7 @@ Verified means: exercised by an automated test or by the Docker script on 2026-1
 | Container restarts preserve data | verified | Docker script |
 | Health checks work | verified | Docker script |
 | No secrets exposed | verified | `test_system_endpoints_never_expose_secrets`, log checks |
-| Automated tests pass | verified | 224 passed locally and in the container |
+| Automated tests pass | verified | 297 passed locally and in the container |
 | Documentation complete | done | This folder |
 
 ## Awaiting live verification
@@ -81,6 +82,10 @@ tested against mocked HTTP responses, but it has not talked to the real services
 | Apify run lifecycle | Start, poll and dataset read against a real Actor | Configure an Actor, add one product |
 | Apify field mapping | The default mapping matches the Actor's real output, including the currency | Compare one dataset item in the Apify console with `APIFY_FIELD_MAP` |
 | Apify cost reporting | `usageTotalUsd` is present for the chosen Actor's pricing model | Compare Settings with the Apify billing page |
+| SerpApi product search | A real response maps to the right price, seller and stock. The seller path was read from a truncated documentation sample | Set the SerpApi settings, add one product, compare with the Amazon page |
+| Easyparser DETAIL request | Real envelope fields (`request_info.success`), price and currency | Same procedure |
+| Scrapingdog product request | Real field names, and its error statuses, which the documentation does not list | Same procedure |
+| Free plan sizes | The allowances in the documentation were read from the providers' pricing pages on 2026-11-18. Canopy's was not confirmed on its own page | Check each provider's dashboard |
 | Discord delivery | A real webhook accepts the embed. The image thumbnail renders | Press "Send test notification", then trigger one alert |
 | SMTP delivery | Your mail server accepts the message | Configure SMTP and press "Send test notification" |
 | Short-link resolution | `a.co` and `amzn.to` redirect chains end on a product page through allowed hosts only | Add a product with a short link |
@@ -90,6 +95,10 @@ format was taken from Discord's official documentation repository on GitHub inst
 
 ## Known limitations
 
+- When several providers serve one product, small differences between their prices can look like price changes.
+- SerpApi may serve a result that is up to one hour old from its cache.
+- Easyparser never names the seller, so it is skipped for products set to "Amazon as seller only".
+- SerpApi and Scrapingdog report no shipping cost and no currency code. The currency is taken from the symbol only when it matches the marketplace.
 - Only the `amazon.com` marketplace is enabled.
 - Canopy's product endpoint has no shipping cost. Canopy prices are item prices with shipping unknown.
 - Seller filtering depends on the provider naming the seller. Without a name, "Amazon as seller only" skips the price.

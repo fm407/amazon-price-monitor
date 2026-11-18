@@ -11,8 +11,8 @@ from app import budget
 from app.checker import check_product, provider_chain
 from app.config import Settings
 from app.models import NotificationDelivery, PriceObservation, Product, ProviderRequest
-from app.providers.apify import ApifyConfigError, ApifyProvider, dig, render_input, resolve_currency
-from app.providers.base import ProviderError
+from app.providers.apify import ApifyConfigError, ApifyProvider, dig, render_input
+from app.providers.base import ProviderError, resolve_currency
 from tests.conftest import make_ctx
 from tests.test_providers import CANOPY_OK
 

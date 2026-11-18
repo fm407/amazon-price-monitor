@@ -14,7 +14,7 @@
   <img alt="FastAPI" src="https://img.shields.io/badge/FastAPI-0.164-009688">
   <img alt="SQLite" src="https://img.shields.io/badge/database-SQLite%20(WAL)-0f6ab4">
   <img alt="Docker" src="https://img.shields.io/badge/deploy-docker%20compose-2496ed">
-  <img alt="Tests" src="https://img.shields.io/badge/tests-224%20passing-2ea44f">
+  <img alt="Tests" src="https://img.shields.io/badge/tests-297%20passing-2ea44f">
   <img alt="Coverage" src="https://img.shields.io/badge/coverage-95%25-2ea44f">
 </p>
 
@@ -32,7 +32,8 @@ You say "tell me at 25% off". When a valid price reaches that target, you get on
 | **No alert spam** | One alert when the price crosses the target. Silence while it stays there. A fresh alert after it recovers and drops again. Optional reminders and further-drop alerts. |
 | **Accurate prices only** | Missing, zero, negative, wrong-currency, out-of-stock and used-offer prices never update history and never trigger alerts. Shipping is added when known and marked unknown when not. |
 | **Hard spending limits** | Paid API calls are off until you enable them. Monthly budget and daily request limits are enforced before every call and survive restarts. |
-| **Three price sources** | Canopy API, Apify, and a built-in mock provider that needs no account. Optional fallback from one paid provider to the other. |
+| **Six price sources** | SerpApi, Easyparser, Scrapingdog, Apify, Canopy API, and a built-in mock provider that needs no account. |
+| **Free plans, combined** | Give each provider its own monthly limit. When one free plan is used up, the next provider takes over automatically. |
 | **Notifications** | Discord webhook (no bot needed), optional SMTP email. Every delivery is recorded and retried on temporary errors. |
 | **Private by default** | Binds to `127.0.0.1`. Single-user login, CSRF protection, strict Content Security Policy, no telemetry, no third-party scripts. |
 
@@ -46,6 +47,10 @@ You say "tell me at 25% off". When a valid price reaches that target, you get on
     <td align="center"><sub>The same dashboard on a phone</sub></td>
   </tr>
 </table>
+
+![Settings page with five providers and their monthly limits](docs/images/settings-providers.png)
+
+<p align="center"><sub>Settings: the order in which providers are tried, what each has used this month, and its own limit</sub></p>
 
 Each product card shows a **target meter**: how far the price has moved from the baseline toward your target.
 Price movement is always shown with a symbol and a word (`▼ down`, `▲ up`), never with colour alone.
@@ -79,18 +84,41 @@ Nothing in mock mode is a real Amazon price.
 
 Edit `.env`, then run `docker compose up -d` again to apply the change.
 
-**1. Choose a price provider**
+**1. Choose one or more price providers**
+
+Several providers have a free monthly plan. You can chain them, and each one stops at its own limit.
+
+| Provider | Free plan seen on 2026-11-18 |
+|---|---|
+| SerpApi | 250 searches per month |
+| Easyparser | 100 credits per month |
+| Scrapingdog | 100 credits per month |
+| Apify | $5 of usage per month |
+| Canopy | reported as 100 requests per month |
 
 ```ini
-PROVIDER=canopy
+PROVIDER=serpapi
+FALLBACK_PROVIDER=easyparser,scrapingdog
 DEMO_MODE=false
-CANOPY_API_KEY=your-key
-CANOPY_COST_PER_REQUEST_USD=0.01     # your own estimate, from your Canopy plan
+
+SERPAPI_API_KEY=your-key
+SERPAPI_COST_PER_REQUEST_USD=0
+SERPAPI_MAX_MONTHLY_REQUESTS=250
+
+EASYPARSER_API_KEY=your-key
+EASYPARSER_COST_PER_REQUEST_USD=0
+EASYPARSER_MAX_MONTHLY_REQUESTS=100
+
+SCRAPINGDOG_API_KEY=your-key
+SCRAPINGDOG_COST_PER_REQUEST_USD=0
+SCRAPINGDOG_MAX_MONTHLY_REQUESTS=100
 ```
 
-For Apify, set `PROVIDER=apify`, `APIFY_TOKEN` and `APIFY_ACTOR_ID`. See [docs/API_PROVIDERS.md](docs/API_PROVIDERS.md).
+That is about 450 free checks per month: 7 products twice a day, or 15 products once a day.
+One provider is enough to start. Free plans change, so confirm the numbers on each provider's
+pricing page. Details for every provider are in [docs/API_PROVIDERS.md](docs/API_PROVIDERS.md).
 
-**2. Allow paid requests and set your limits**
+**2. Allow provider requests and set your limits**
 
 ```ini
 ALLOW_PAID_API_REQUESTS=true
@@ -140,7 +168,10 @@ products x (minutes per month / check interval)
 Multiply by your provider's price per request. The application stops paid requests when your
 monthly budget or daily limit is reached, shows the reason on the dashboard, and sends one
 notification per month. It stays online and resumes by itself. The spend figure is your own
-estimate unless the provider reports real cost (Apify does, Canopy does not).
+estimate unless the provider reports real cost (Apify does, the others do not).
+
+With free plans, set each provider's cost to `0` and its `MAX_MONTHLY_REQUESTS` to the plan size.
+The **Settings** page shows how much of each provider's allowance is used.
 
 ## Everyday commands
 
@@ -165,7 +196,7 @@ Browser --> FastAPI (one process, one worker)
               |- REST API  /api/v1  (OpenAPI document at /api/v1/openapi.json)
               '- Scheduler thread --> Check pipeline
                                         budget guard > provider > normalize > store > alert rules
-                                        Providers: Canopy | Apify | Mock
+                                        Providers: SerpApi | Easyparser | Scrapingdog | Apify | Canopy | Mock
                                         Notifiers: Discord webhook | SMTP | Mock
 
 SQLite (WAL) on the named volume "amazon-price-monitor-data", mounted at /app/data
@@ -194,13 +225,13 @@ The reasoning behind each decision is in [docs/ARCHITECTURE.md](docs/ARCHITECTUR
 
 ## Verification status
 
-- 224 automated tests pass on macOS and inside a Linux container. Line coverage is 95%.
+- 297 automated tests pass on macOS and inside a Linux container. Line coverage is 95%.
 - The Docker script builds the image, runs the full alert scenario, restarts and recreates the
   container, and confirms that data and alert state persist.
 - Dependencies are pinned with hashes. The vulnerability audit reports no known issues.
 
-**Not yet verified with live credentials:** real Canopy responses, real Apify Actor runs, and real
-Discord and SMTP delivery. These integrations follow the official API documentation and are tested
+**Not yet verified with live credentials:** real responses from the five external providers, and
+real Discord and SMTP delivery. These integrations follow the official API documentation and are tested
 against mocked HTTP responses. See [docs/STATUS.md](docs/STATUS.md) for the exact list.
 
 ## Known limitations

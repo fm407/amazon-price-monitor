@@ -134,7 +134,7 @@
             {% for o in observations %}
             <tr><td>{{ localtime(o.observed_at) }}</td><td>{{ o.price_minor|money(o.currency) }}</td>
               <td>{% if o.shipping_minor is none %}unknown{% elif o.shipping_minor == 0 %}free{% else %}{{ o.shipping_minor|money(o.currency) }}{% endif %}</td>
-              <td>{{ o.seller or 'unknown' }}</td><td>{{ o.condition }}</td><td>{{ o.provider|capitalize }}</td></tr>
+              <td>{{ o.seller or 'unknown' }}</td><td>{{ o.condition }}</td><td>{{ o.provider|provider }}</td></tr>
             {% else %}<tr><td colspan="6" class="text-secondary">No valid price has been recorded yet.</td></tr>{% endfor %}
           </tbody>
         </table>
@@ -176,7 +176,7 @@
           <div class="col-6"><label class="form-label small" for="provider">Provider</label>
             <select class="form-select form-select-sm" id="provider" name="provider">
               <option value="">Default</option>
-              {% for name in providers %}<option value="{{ name }}" {% if p.provider == name %}selected{% endif %}>{{ name|capitalize }}</option>{% endfor %}
+              {% for name in providers %}<option value="{{ name }}" {% if p.provider == name %}selected{% endif %}>{{ name|provider }}</option>{% endfor %}
             </select></div>
           <div class="col-6"><label class="form-label small" for="seller_filter">Seller</label>
             <select class="form-select form-select-sm" id="seller_filter" name="seller_filter">
@@ -228,7 +228,7 @@
       <div class="card-header fw-semibold">Check errors</div>
       <ul class="list-group list-group-flush">
         {% for r in errors %}
-        <li class="list-group-item small">{{ r.provider|capitalize }} · <strong>{{ r.category }}</strong>{% if r.http_status %} · HTTP {{ r.http_status }}{% endif %} · {{ localtime(r.started_at) }}<br><span class="text-secondary">{{ r.detail or '' }}</span></li>
+        <li class="list-group-item small">{{ r.provider|provider }} · <strong>{{ r.category }}</strong>{% if r.http_status %} · HTTP {{ r.http_status }}{% endif %} · {{ localtime(r.started_at) }}<br><span class="text-secondary">{{ r.detail or '' }}</span></li>
         {% else %}<li class="list-group-item small text-secondary">No recent errors.</li>{% endfor %}
       </ul>
     </section>

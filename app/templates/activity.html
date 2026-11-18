@@ -34,7 +34,7 @@
     <thead><tr><th>When</th><th>Provider</th><th>ASIN</th><th>Category</th><th>HTTP</th><th>Detail</th></tr></thead>
     <tbody>
       {% for r in failures %}
-      <tr><td>{{ localtime(r.started_at) }}</td><td>{{ r.provider|capitalize }}</td><td class="num">{{ r.asin }}</td><td>{{ r.category }}</td>
+      <tr><td>{{ localtime(r.started_at) }}</td><td>{{ r.provider|provider }}</td><td class="num">{{ r.asin }}</td><td>{{ r.category }}</td>
         <td class="num">{{ r.http_status or '' }}</td><td class="text-secondary">{{ r.detail or '' }}</td></tr>
       {% else %}<tr><td colspan="6" class="text-secondary">No failures recorded.</td></tr>{% endfor %}
     </tbody>

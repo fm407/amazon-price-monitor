@@ -3,11 +3,17 @@
 The application never scrapes Amazon itself. It asks a provider for product data.
 Every provider implements one interface: `fetch_product(asin, marketplace)`.
 
-| Provider | Account needed | Cost | Use |
+| Provider | Account needed | Free plan seen on 2026-11-18 | One check costs |
 |---|---|---|---|
-| `mock` | no | free | Demos, development, tests. Fictional prices. |
-| `canopy` | yes | per request | Recommended. One HTTP request per check. |
-| `apify` | yes | per Actor run | Alternative or fallback. One Actor run per check. |
+| `mock` | no | always free | nothing. Fictional prices for demos and tests. |
+| `serpapi` | yes | 250 searches per month, no card | 1 search |
+| `easyparser` | yes | 100 credits per month, no card | 1 credit |
+| `scrapingdog` | yes | 100 credits per month, no card | 1 credit |
+| `apify` | yes | $5 of platform usage per month, no card | 1 Actor run, priced by the Actor |
+| `canopy` | yes | reported as 100 requests per month (not confirmed on the provider's own page) | 1 request |
+
+Free plans change. Check the provider's pricing page before you rely on these numbers.
+You can combine several providers and their free plans. See "Using several free plans together".
 
 Each stored price records which provider supplied it.
 
@@ -148,6 +154,78 @@ request and uses it for the budget. Until a run reports its cost, your estimate 
 A failed or timed-out run is not retried within the same check, because a retry would start a second
 paid run. The next scheduled check tries again.
 
+## SerpApi
+
+Verified against <https://serpapi.com/amazon-product-api> and
+<https://serpapi.com/api-status-and-error-codes>.
+
+| Item | Value |
+|---|---|
+| Request | `GET https://serpapi.com/search?engine=amazon_product&asin=<ASIN>&amazon_domain=amazon.com&api_key=<key>` |
+| Price | `purchase_options.buy_new.extracted_price`, else `product_results.extracted_price` |
+| Seller | `purchase_options.buy_new.features.shipper_seller.text` |
+| Stock | `product_results.stock` |
+| Currency | No currency code. The symbol in the price text is accepted only when it is the marketplace currency. |
+| Shipping | Unknown. The delivery text is conditional ("over $35"). |
+
+```ini
+SERPAPI_API_KEY=your-key
+SERPAPI_COST_PER_REQUEST_USD=0
+SERPAPI_MAX_MONTHLY_REQUESTS=250
+```
+
+SerpApi answers a repeated search from a one-hour cache without charging for it. A price can
+therefore be up to one hour old. When the price comes from the "buy new" offer the condition is
+`new`; otherwise it is `unknown`.
+
+## Easyparser
+
+Verified against <https://docs.easyparser.com/real-time-integration/overview> and its DETAIL
+response page.
+
+| Item | Value |
+|---|---|
+| Request | `GET https://realtime.easyparser.com/v1/request?api_key=<key>&platform=AMZ&operation=DETAIL&domain=.com&asin=<ASIN>` |
+| Price | `result.detail.buybox_winner.price.value` with `.currency` (ISO code) |
+| Condition | `buybox_winner.condition.is_new` |
+| Stock | `buybox_winner.availability.raw` |
+| Shipping | `buybox_winner.shipping.raw`. Only the exact text `FREE` is read as zero. Anything else is unknown. |
+| Seller | Not available. The response gives a seller type, not a name. |
+
+```ini
+EASYPARSER_API_KEY=your-key
+EASYPARSER_COST_PER_REQUEST_USD=0
+EASYPARSER_MAX_MONTHLY_REQUESTS=100
+```
+
+The adapter checks `request_info.success` even when the HTTP status is 200, as the documentation
+requires. Requests use a 75-second timeout because the documentation recommends at least 60.
+Because there is no seller name, Easyparser is left out automatically for products set to
+"Amazon as seller only". Those products use the other providers in your list.
+
+## Scrapingdog
+
+Verified against <https://www.scrapingdog.com/documentation/amazon-product-scraper/>.
+
+| Item | Value |
+|---|---|
+| Request | `GET https://api.scrapingdog.com/amazon/product?api_key=<key>&asin=<ASIN>&domain=com&country=us` |
+| Price | `purchase_options.single_offer.extracted_price`. If absent, the number at the start of the `price` text. |
+| Seller | `sold_by` |
+| Stock | `availability_status` |
+| Currency | `price_symbol` only. Accepted when it is the marketplace currency. |
+| Shipping | Unknown. `shipping_info` is free text. |
+| Condition | Unknown. The response has no condition field. |
+
+```ini
+SCRAPINGDOG_API_KEY=your-key
+SCRAPINGDOG_COST_PER_REQUEST_USD=0
+SCRAPINGDOG_MAX_MONTHLY_REQUESTS=100
+```
+
+The documentation page lists no error statuses. The adapter applies the same handling as for the
+other providers: 401 and 403 pause the provider, 429 and 5xx are retried, 404 means not found.
+
 ## Fallback
 
 ```ini
@@ -155,14 +233,76 @@ PROVIDER=canopy
 FALLBACK_PROVIDER=apify
 ```
 
-The fallback is tried only when the primary provider itself fails: authentication, quota, rate limit,
-timeout, network error, server error or malformed response. It is **not** tried when:
+The fallback is tried when the primary provider itself fails (authentication, quota, rate limit,
+timeout, network error, server error or malformed response) or has reached its own monthly limit.
+It is **not** tried when:
 
 - the primary provider answered that the product does not exist or has no price, or
-- the request was skipped because of the budget, the daily limit or `ALLOW_PAID_API_REQUESTS=false`.
+- the request was skipped because of the global budget, the daily limit or `ALLOW_PAID_API_REQUESTS=false`.
 
 A product can also use a specific provider. Open the product and change **Provider** under
 *Monitoring settings*. The stored product and its history stay the same.
+
+## Using several free plans together
+
+Each paid provider can have its own monthly limit. When a provider reaches its limit, the next
+provider in the chain takes over. When every provider has reached its limit, checks are skipped
+until the next calendar month (UTC). The application stays online.
+
+Example: three free plans, about 450 checks per month in total.
+
+```ini
+PROVIDER=serpapi
+FALLBACK_PROVIDER=easyparser,scrapingdog
+ALLOW_PAID_API_REQUESTS=true
+DEMO_MODE=false
+
+SERPAPI_API_KEY=your-key
+SERPAPI_COST_PER_REQUEST_USD=0
+SERPAPI_MAX_MONTHLY_REQUESTS=250
+
+EASYPARSER_API_KEY=your-key
+EASYPARSER_COST_PER_REQUEST_USD=0
+EASYPARSER_MAX_MONTHLY_REQUESTS=100
+
+SCRAPINGDOG_API_KEY=your-key
+SCRAPINGDOG_COST_PER_REQUEST_USD=0
+SCRAPINGDOG_MAX_MONTHLY_REQUESTS=100
+
+MAX_MONTHLY_API_SPEND_USD=1.00         # global safety net; free requests cost nothing against it
+MAX_DAILY_API_REQUESTS=15              # 450 per month is 15 per day
+DEFAULT_CHECK_INTERVAL_MINUTES=720     # 7 products, twice a day
+```
+
+Apify and Canopy can join the same list. For Apify, limit by spend instead of by request count:
+`APIFY_MAX_MONTHLY_SPEND_USD=5.00`.
+
+| Setting | Counts |
+|---|---|
+| `<PROVIDER>_MAX_MONTHLY_REQUESTS` | Every request sent to that provider this month, including failed ones and retries. |
+| `<PROVIDER>_MAX_MONTHLY_SPEND_USD` | That provider's cost this month: the reported cost when the provider reports it, your estimate otherwise. |
+
+Rules:
+
+- `FALLBACK_PROVIDER` takes one name or a comma-separated list. Providers are tried in that order.
+- A provider's own limit moves the check on to the next provider. The global limits
+  (`MAX_MONTHLY_API_SPEND_USD`, `MAX_DAILY_API_REQUESTS`, `ALLOW_PAID_API_REQUESTS`) stop the check
+  for every provider.
+- **Settings** shows, per provider, the requests and cost used this month and its limit.
+- Check your free plan's real numbers in the provider's dashboard. Free plans change.
+- Set the limit a little below the plan's allowance if you also use the key elsewhere.
+
+Things to know when several providers serve the same product:
+
+- Providers can report slightly different prices for the same product at the same moment, for
+  example with or without shipping. A switch between providers can look like a small price change.
+  Prefer alert thresholds of several percent over very tight ones.
+- A provider that never names the seller (Easyparser) is skipped for products set to "Amazon as
+  seller only", so its allowance is not spent on prices that would be rejected.
+- Every observation records its provider, so you can see the source of each point in the history.
+
+How far a free plan goes: requests per month = products x (43,200 / check interval in minutes).
+With 450 free requests, that is 15 products once a day, or 7 products twice a day.
 
 ## Spending safeguards
 

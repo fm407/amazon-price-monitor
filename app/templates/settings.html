@@ -9,20 +9,27 @@
   <div class="ticker-cell"><div class="ticker-label">Monthly limit</div><div class="ticker-value">{{ usage.max_monthly_api_spend_usd|usd }}</div><div class="ticker-note">{{ usage.remaining_usd|usd }} remaining</div></div>
   <div class="ticker-cell {{ 'is-good' if usage.paid_requests_allowed else '' }}"><div class="ticker-label">Paid requests</div><div class="ticker-value is-text">{{ 'Enabled' if usage.paid_requests_allowed else 'Disabled' }}</div><div class="ticker-note">{{ usage.paid_requests_today }} of {{ usage.max_daily_api_requests }} today</div></div>
 </section>
+<section class="card mb-3">
+  <div class="card-header">Price providers</div>
+  <div class="table-responsive"><table class="table table-sm mb-0 align-middle">
+    <thead><tr><th>Order</th><th>Provider</th><th>Health</th><th>Used this month</th><th>Own monthly limit</th><th>Est. cost per request</th></tr></thead>
+    <tbody>
+      {% for r in provider_rows %}
+      <tr>
+        <td class="text-nowrap">{% if r.order %}<span class="num">{{ r.order }}</span> <span class="text-secondary">{{ r.role }}</span>{% else %}<span class="text-secondary">not in use</span>{% endif %}</td>
+        <td class="text-nowrap fw-semibold">{{ r.label }}</td>
+        <td>{{ r.health }}</td>
+        <td class="num text-nowrap">{{ r.month_requests }} requests, {{ r.month_cost_usd|usd }}</td>
+        <td class="text-nowrap">{{ r.monthly_limit or "none" }}</td>
+        <td class="num">{{ r.estimated_cost_per_request_usd|usd }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table></div>
+  <div class="card-footer small text-secondary">Providers are tried in this order. When one reaches its own monthly limit, the next one takes over. Health comes from this application's own request log. Costs are your configured estimates unless the provider reports actual usage.</div>
+</section>
 <div class="row g-3">
   <div class="col-12 col-lg-6">
-    <section class="card mb-3">
-      <div class="card-header">Price providers</div>
-      <div class="table-responsive"><table class="table table-sm mb-0 align-middle">
-        <thead><tr><th>Provider</th><th>Role</th><th>Health</th><th>Est. cost per request</th></tr></thead>
-        <tbody>
-          {% for r in provider_rows %}
-          <tr><td>{{ r.name|capitalize }}</td><td>{{ r.role }}</td><td>{{ r.health }}</td><td class="num">{{ r.estimated_cost_per_request_usd|usd }}</td></tr>
-          {% endfor %}
-        </tbody>
-      </table></div>
-      <div class="card-footer small text-secondary">Health comes from this application's own request log. Costs are your configured estimates unless the provider reports actual usage.</div>
-    </section>
     <section class="card mb-3">
       <div class="card-header">Notifications</div>
       <div class="card-body">
@@ -42,8 +49,7 @@
       <div class="card-body">
         <dl class="card-facts mb-0">
           <dt>Version</dt><dd>{{ info.version }}</dd>
-          <dt>Active provider</dt><dd>{{ info.provider|capitalize }}</dd>
-          <dt>Fallback provider</dt><dd>{{ (info.fallback_provider or 'none')|capitalize }}</dd>
+          <dt>Provider order</dt><dd>{{ info.provider_chain|join(', then ') }}</dd>
           <dt>Demo mode</dt><dd>{{ 'on' if info.demo_mode else 'off' }}</dd>
           <dt>Default check interval</dt><dd>{{ info.default_check_interval_minutes }} minutes</dd>
           <dt>Time zone</dt><dd>{{ info.timezone }}</dd>

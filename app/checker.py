@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 
 from app import alerts, budget, notify
 from app.context import AppContext
-from app.logging_config import job_id_var
+from app.logging_config import job_id_var, redact
 from app.models import PriceObservation, Product
 from app.normalize import NormalizedPrice, PriceRejected, normalize
 from app.providers.base import ProductData, ProviderError
@@ -27,7 +27,7 @@ RAW_LIMIT_BYTES = 4000
 # Failures of the provider itself. Only these justify trying the fallback provider.
 FALLBACK_CATEGORIES = {
     "auth", "quota", "rate_limited", "timeout", "network", "http_error", "malformed",
-    "not_configured", "run_failed", "unsupported_marketplace", "provider_blocked", "internal",
+    "not_configured", "run_failed", "unsupported_marketplace", "provider_blocked", "provider_quota", "internal",
 }  # fmt: skip
 # Failures worth retrying sooner than the normal interval.
 TRANSIENT_CATEGORIES = {
@@ -57,13 +57,29 @@ class FetchFailure:
     skipped: bool = False
 
 
-def provider_chain(ctx: AppContext, product_provider: str | None) -> list[str]:
+def provider_chain(ctx: AppContext, product_provider: str | None, seller_filter: str = "any") -> list[str]:
+    """Providers to try, in order. Providers that cannot serve this product's settings are left out."""
     primary = product_provider if product_provider in ctx.providers else ctx.settings.provider
     chain = [primary] if primary in ctx.providers else []
-    fallback = ctx.settings.fallback_provider
-    if fallback and fallback != primary and fallback in ctx.providers:
-        chain.append(fallback)
+    for fallback in ctx.settings.fallback_providers:
+        if fallback not in chain and fallback in ctx.providers:
+            chain.append(fallback)
+    if seller_filter == "amazon":
+        # "Amazon as seller only" needs the seller's name. A provider that never reports it would
+        # use up its allowance on prices that are always rejected.
+        chain = [name for name in chain if ctx.providers[name].reports_seller]
     return chain
+
+
+def _prefer(current: "FetchFailure | None", new: "FetchFailure") -> "FetchFailure":
+    """Keep the most informative failure: a real provider error outranks a skip, which outranks 'not configured'."""
+
+    def rank(failure: "FetchFailure") -> int:
+        if failure.category == "not_configured":
+            return 0
+        return 1 if failure.skipped else 2
+
+    return new if current is None or rank(new) >= rank(current) else current
 
 
 def _retry_delay(ctx: AppContext, attempt: int, retry_after: float | None) -> float | None:
@@ -114,20 +130,32 @@ def fetch(
     ctx: AppContext, product_id: int | None, asin: str, marketplace: str, chain: list[str]
 ) -> tuple[ProductData | None, str | None, FetchFailure | None]:
     """Try each provider in the chain. Returns (data, provider_name, failure)."""
-    failure: FetchFailure | None = FetchFailure("not_configured", "No price provider is configured.")
+    failure: FetchFailure | None = None
     name: str | None = None
     for name in chain:
         provider = ctx.providers[name]
+        if not provider.configured:
+            # No request can be sent, so nothing is reserved against the budget or the provider's limit.
+            failure = _prefer(
+                failure, FetchFailure("not_configured", f"The {name} provider has no credentials configured.")
+            )
+            continue
         blocked = ctx.blocked_until.get(name)
         if blocked and blocked > ctx.now():
             budget.record_skip(ctx, provider, product_id, asin, "provider_blocked")
-            failure = FetchFailure("provider_blocked", budget.DENIAL_MESSAGES["provider_blocked"], skipped=True)
+            failure = _prefer(
+                failure, FetchFailure("provider_blocked", budget.DENIAL_MESSAGES["provider_blocked"], skipped=True)
+            )
             continue
         for attempt in range(max(1, ctx.settings.provider_max_attempts)):
             request_id, denial = budget.reserve(ctx, provider, product_id, asin, attempt)
             if request_id is None:
-                # Budget denials end the whole chain: never fall back to another paid provider.
                 assert denial is not None  # noqa: S101
+                if denial == "provider_quota":
+                    # This provider's own allowance is used up. The next provider in the chain may still have one.
+                    failure = _prefer(failure, FetchFailure(denial, budget.DENIAL_MESSAGES[denial], skipped=True))
+                    break
+                # Global budget denials end the whole chain: never fall back to another paid provider.
                 if denial == "monthly_budget":
                     budget.notify_exhausted_once(ctx)
                 return None, name, FetchFailure(denial, budget.DENIAL_MESSAGES[denial], skipped=True)
@@ -151,6 +179,8 @@ def fetch(
             ctx.sleep(delay)
         if failure is None or failure.category not in FALLBACK_CATEGORIES:
             break
+    if failure is None:
+        failure = FetchFailure("not_configured", "No configured price provider can check this product.")
     return None, name, failure
 
 
@@ -239,7 +269,7 @@ def record_observation(
 
 
 def _apply_failure(ctx: AppContext, product: Product, failure: FetchFailure, now: datetime) -> CheckResult:
-    product.last_error = failure.message[:500]
+    product.last_error = redact(failure.message)[:500]
     product.last_error_at = now
     if failure.skipped:
         schedule_next(ctx, product, now)
@@ -300,7 +330,7 @@ def check_product(ctx: AppContext, product_id: int) -> CheckResult:
             if product is None:
                 return CheckResult("deleted", "deleted", "The product no longer exists.")
             asin, marketplace = product.asin, product.marketplace
-            chain = provider_chain(ctx, product.provider)
+            chain = provider_chain(ctx, product.provider, product.seller_filter)
         # No database session is held open during network I/O.
         data, provider, failure = fetch(ctx, product_id, asin, marketplace, chain)
         with ctx.sessions() as session:
