@@ -167,3 +167,17 @@ Regression tests are in `tests/test_trust_and_ops.py`.
 | A skipped check could be recorded under the wrong provider | The ledger entry used the last provider in the chain, not the one the reason belonged to | Each outcome carries its provider, and the entry uses that |
 | The back-in-stock message printed a target price and savings | It reused the price-drop message | It shows the current price and the last price before the product went out of stock |
 | On-demand backups were deleted by the automatic retention, and could postpone the scheduled backup | Both used the same file name pattern | On-demand backups have their own name and are never deleted automatically |
+
+## 15. Findings of the code review of the alert chart
+
+No critical or high findings. Measured rendering cost: 16 to 25 ms and about 65 KB per chart.
+All of the following were fixed before the branch was merged. Regression tests are in
+`tests/test_notify.py`.
+
+| Finding | Root cause | Correction |
+|---|---|---|
+| When Discord refused the chart and the plain retry then hit a rate limit, every later retry uploaded the chart again | The chart was attached on every attempt | Only the first attempt carries the chart. Retries send the alert text alone |
+| A history worth less than a few cents produced repeated axis labels | Sub-unit grid steps rounded to the same value | Axis values are made unique |
+| Very large prices were cut off at the left edge of the chart | The left margin was fixed | The margin grows to fit the widest price label |
+| A product whose currency changed inside the chart window would plot two currencies on one axis | The chart query did not filter by currency | The chart uses observations in the alert's currency only |
+| The mock channel kept every message and chart in memory | Unbounded lists | It keeps the latest 200 |

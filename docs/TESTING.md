@@ -50,9 +50,9 @@ Run on 2026-11-18.
 |---|---|
 | `ruff check` (includes security rules) | passed |
 | `ruff format --check` | passed |
-| `mypy` | passed, 31 source files |
-| `pytest` on macOS, Python 3.14 | 323 passed |
-| `pytest` in the Linux container, Python 3.14 | 323 passed |
+| `mypy` | passed, 32 source files |
+| `pytest` on macOS, Python 3.14 | 335 passed |
+| `pytest` in the Linux container, Python 3.14 | 335 passed |
 | Line coverage | 95% |
 | `pip-audit` | no known vulnerabilities |
 | `scripts/docker_test.sh` | all checks passed |
@@ -71,7 +71,7 @@ Run on 2026-11-18.
 | `test_trust_and_ops.py` | integration | Provider test action, confirmation of large drops, pacing of monthly limits, back-in-stock alerts, scheduled backups |
 | `test_checker.py` | integration | Product creation, history, invalid responses, shipping, retries, rate limits, concurrency, deletion during a check, scheduler, restart recovery, budget and daily limits |
 | `test_e2e.py` | end to end | The specification scenario including a restart, and one scenario per alert type |
-| `test_notify.py` | integration | Discord payload, escaping, retries, permanent failures, secret redaction, email |
+| `test_notify.py` | integration | Discord payload, escaping, retries, permanent failures, secret redaction, email, the price history chart and its fallbacks |
 | `test_api.py` | integration | Authentication, setup, CSRF, the REST API, exports, error format, no secrets in responses |
 | `test_web.py` | integration | Every page and form, output escaping, demo mode |
 | `test_hardening.py` | integration | Body limits, session invalidation, secret rules, CSV and title sanitising |

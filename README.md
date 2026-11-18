@@ -14,7 +14,7 @@
   <img alt="FastAPI" src="https://img.shields.io/badge/FastAPI-0.164-009688">
   <img alt="SQLite" src="https://img.shields.io/badge/database-SQLite%20(WAL)-0f6ab4">
   <img alt="Docker" src="https://img.shields.io/badge/deploy-docker%20compose-2496ed">
-  <img alt="Tests" src="https://img.shields.io/badge/tests-323%20passing-2ea44f">
+  <img alt="Tests" src="https://img.shields.io/badge/tests-335%20passing-2ea44f">
   <img alt="Coverage" src="https://img.shields.io/badge/coverage-95%25-2ea44f">
 </p>
 
@@ -37,7 +37,7 @@ You say "tell me at 25% off". When a valid price reaches that target, you get on
 | **Free plans, combined** | Give each provider its own monthly limit. Usage is spread over the month, and when one provider is at its limit the next one takes over. |
 | **Test before you trust** | The Settings page sends one test request to any provider and shows exactly what came back and how it would be used. |
 | **Automatic backups** | A daily database backup inside the data volume, with the last seven kept. |
-| **Notifications** | Discord webhook (no bot needed), optional SMTP email. Every delivery is recorded and retried on temporary errors. |
+| **Notifications** | Discord webhook (no bot needed), optional SMTP email. Each alert includes a price history chart. Every delivery is recorded and retried on temporary errors. |
 | **Private by default** | Binds to `127.0.0.1`. Single-user login, CSRF protection, strict Content Security Policy, no telemetry, no third-party scripts. |
 
 <table>
@@ -149,6 +149,11 @@ DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/123456789/your-token
 Open *Settings* in the dashboard and press **Send test notification**.
 Step-by-step instructions are in [docs/DISCORD_SETUP.md](docs/DISCORD_SETUP.md).
 
+Each alert carries a chart of the recent price history, with the baseline and the target marked:
+
+<p align="center"><img src="docs/images/alert-chart.png" width="75%" alt="Price history chart attached to an alert"></p>
+<p align="center"><sub>The chart attached to an alert, rendered here from the fictional demo data</sub></p>
+
 ## Add your first product
 
 1. On the dashboard, open **Add a product**.
@@ -237,7 +242,7 @@ The reasoning behind each decision is in [docs/ARCHITECTURE.md](docs/ARCHITECTUR
 
 ## Verification status
 
-- 323 automated tests pass on macOS and inside a Linux container. Line coverage is 95%.
+- 335 automated tests pass on macOS and inside a Linux container. Line coverage is 95%.
 - The Docker script builds the image, runs the full alert scenario, restarts and recreates the
   container, and confirms that data and alert state persist.
 - Dependencies are pinned with hashes. The vulnerability audit reports no known issues.

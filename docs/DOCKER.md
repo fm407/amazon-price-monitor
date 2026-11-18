@@ -4,7 +4,7 @@ The deployment is one container and one named volume.
 
 | Item | Value |
 |---|---|
-| Image | `amazon-price-monitor:local`, built from `Dockerfile` (multi-stage, about 300 MB) |
+| Image | `amazon-price-monitor:local`, built from `Dockerfile` (multi-stage, about 330 MB) |
 | Container | `amazon-price-monitor` |
 | Volume | `amazon-price-monitor-data`, mounted at `/app/data` |
 | Port | `127.0.0.1:8080` on the host, `8080` in the container |
