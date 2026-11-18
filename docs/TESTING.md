@@ -51,8 +51,8 @@ Run on 2026-11-18.
 | `ruff check` (includes security rules) | passed |
 | `ruff format --check` | passed |
 | `mypy` | passed, 31 source files |
-| `pytest` on macOS, Python 3.14 | 322 passed |
-| `pytest` in the Linux container, Python 3.14 | 322 passed |
+| `pytest` on macOS, Python 3.14 | 323 passed |
+| `pytest` in the Linux container, Python 3.14 | 323 passed |
 | Line coverage | 95% |
 | `pip-audit` | no known vulnerabilities |
 | `scripts/docker_test.sh` | all checks passed |
@@ -75,7 +75,7 @@ Run on 2026-11-18.
 | `test_api.py` | integration | Authentication, setup, CSRF, the REST API, exports, error format, no secrets in responses |
 | `test_web.py` | integration | Every page and form, output escaping, demo mode |
 | `test_hardening.py` | integration | Body limits, session invalidation, secret rules, CSV and title sanitising |
-| `test_migrations.py` | integration | Migrations build a schema identical to the models |
+| `test_migrations.py` | integration | Migrations build a schema identical to the models, and an upgrade keeps existing data |
 | `test_config.py` | unit | `.env.example` matches the settings, safe defaults, backup and restore |
 
 ## The specification scenario
