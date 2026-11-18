@@ -323,12 +323,16 @@ With `CONFIRM_DROP_PERCENT=15`, a price that is 15% or more below the last store
 recorded at once. It is held, and a second check runs after `CONFIRM_RECHECK_MINUTES` (15 by
 default), from a different provider when one is available.
 
-- If the second reading is also a large drop, it is recorded and alerts are evaluated as usual.
+- If the second reading is within 5% of the held one, it is recorded and alerts are evaluated as usual.
 - If the second reading is normal, the held value is discarded. No alert is sent.
+- If the second reading is a different large drop, it becomes the new held value and is checked again.
+- A held value is forgotten after 24 hours, when a check returns no valid price, and when the product
+  is paused.
 
 The product page shows "Waiting for confirmation" while a value is held. The cost is one extra
-request per large drop and a delay of a few minutes for real deals. The first price of a new
-product is never held.
+request per large drop and a delay of a few minutes for real deals. The second reading comes from
+the next provider in your list when there is one, which may be a provider that costs money. The
+first price of a new product is never held.
 
 Things to know when several providers serve the same product:
 

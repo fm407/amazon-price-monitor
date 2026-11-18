@@ -14,7 +14,7 @@
       <a href="{{ p.url }}" target="_blank" rel="noopener noreferrer">Open on Amazon</a>
     </div>
     {% if p.pending_price_minor is not none %}<div class="alert alert-warning py-1 px-2 mt-2 mb-0 small" role="status"><strong>Waiting for confirmation:</strong> a drop to {{ p.pending_price_minor|money(c.currency) }} was seen {{ localtime(p.pending_since) }}. It is recorded once a second check agrees.</div>
-    {% elif p.last_error %}<div class="alert alert-warning py-1 px-2 mt-2 mb-0 small" role="status">Last check: {{ p.last_error }}</div>{% endif %}
+    {% endif %}{% if p.last_error and p.pending_price_minor is none %}<div class="alert alert-warning py-1 px-2 mt-2 mb-0 small" role="status">Last check: {{ p.last_error }}</div>{% endif %}
   </div>
 </div>
 

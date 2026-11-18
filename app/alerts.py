@@ -192,9 +192,10 @@ def evaluate_condition(
         target = apply_discount(average, rule.threshold)
         return Condition(price <= target, target, average)
     if rule.kind == BACK_IN_STOCK:
-        # Only a confirmed out-of-stock state followed by a valid in-stock price counts.
-        returned = previous_availability == "out_of_stock" and observation.availability == "in_stock"
-        return Condition(returned, None, product.baseline_minor)
+        # Only a reported out-of-stock state followed by a valid price counts.
+        # A valid price means an offer can be bought, even when the provider does not state the stock.
+        returned = previous_availability == "out_of_stock" and observation.availability != "out_of_stock"
+        return Condition(returned, None, previous_minor)
     if rule.kind == NEW_LOW:
         if previous_low_minor is None:
             return None

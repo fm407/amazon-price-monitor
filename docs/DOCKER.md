@@ -66,15 +66,18 @@ losing the volume or the disk.
 docker compose cp app:/app/data/backups ./
 ```
 
-Run that from a cron job on the host if you want copies elsewhere. Backups made on demand follow the
-same retention count as the automatic ones.
+Run that from a cron job on the host if you want copies elsewhere.
+
+Backups made on demand are named `manual-<date>-<time>.db`. They are never deleted automatically,
+so remove old ones yourself. A backup is written under a temporary name first, so an interrupted
+backup never leaves a file that looks complete.
 
 ## Restore
 
 ```bash
 docker compose stop app
 docker compose run --rm -v "$PWD/backups":/restore:ro app \
-  python -m app restore /restore/monitor-20261118-182247.db
+  python -m app restore /restore/manual-20261118-182247.db
 docker compose up -d
 ```
 

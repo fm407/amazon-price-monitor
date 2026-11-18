@@ -348,3 +348,167 @@ def test_a_failing_backup_does_not_stop_price_checks(ctx, mock, monkeypatch):
     assert [r.status for r in scheduler.run_once()] == ["ok"]
     assert reload(ctx, product).latest_price_minor == 79000
     scheduler.stop()
+
+
+# --- Regression tests for the second code review ----------------------------------------------
+
+
+def test_two_unrelated_glitches_do_not_confirm_each_other(confirming):
+    ctx, mock = confirming, confirming.providers["mock"]
+    product = add(ctx, "pct_below_baseline", "25")
+    mock.set_price(GPU, "100.00")
+    assert check_product(ctx, product.id).status == "pending"
+    mock.set_price(GPU, "60.00")  # also a large drop, but not the same reading
+    ctx.now.advance(minutes=15)
+    assert check_product(ctx, product.id).status == "pending"
+    assert reload(ctx, product).pending_price_minor == 6000  # the newer reading is now the held one
+    ctx.now.advance(days=20)  # far too old to confirm anything
+    assert check_product(ctx, product.id).status == "pending"
+    stored = reload(ctx, product)
+    assert (stored.latest_price_minor, stored.pending_since) == (80000, ctx.now())
+    assert (count(ctx, PriceObservation), count(ctx, AlertEvent)) == (1, 0) and ctx.notifiers["mock"].sent == []
+    ctx.now.advance(minutes=15)
+    mock.set_price(GPU, "61.00")  # within 5% of the held 60.00, minutes later: a real confirmation
+    assert check_product(ctx, product.id).status == "ok"
+    assert reload(ctx, product).latest_price_minor == 6100 and count(ctx, AlertEvent) == 1
+
+
+def test_held_reading_survives_a_provider_failure_but_not_a_no_price_answer_or_a_pause(confirming):
+    ctx, mock = confirming, confirming.providers["mock"]
+    product = add(ctx)
+    mock.set_price(GPU, "600.00")
+    check_product(ctx, product.id)
+    mock.set_mode("outage", GPU)  # no reading at all: the held value stays
+    assert check_product(ctx, product.id).status == "error"
+    assert reload(ctx, product).pending_price_minor == 60000
+    mock.set_mode("ok", GPU)
+    assert check_product(ctx, product.id).status == "ok"  # the same reading again confirms it
+    assert reload(ctx, product).latest_price_minor == 60000
+
+    mock.set_price(GPU, "400.00")
+    assert check_product(ctx, product.id).status == "pending"
+    mock.set_mode("out_of_stock", GPU)  # an answer without a valid price does not confirm
+    assert check_product(ctx, product.id).status == "no_price"
+    stored = reload(ctx, product)
+    assert (stored.pending_price_minor, stored.pending_since, stored.pending_provider) == (None, None, None)
+    assert "out of stock" in stored.last_error  # the real reason is visible again
+
+    mock.set_mode("ok", GPU)
+    assert check_product(ctx, product.id).status == "pending"
+    with ctx.sessions() as session:
+        products.set_status(ctx, session.get(Product, product.id), "paused")
+        session.commit()
+    assert reload(ctx, product).pending_price_minor is None
+
+
+def test_back_in_stock_alert_survives_a_held_price(confirming):
+    ctx, mock = confirming, confirming.providers["mock"]
+    product = add(ctx, "back_in_stock", None, cooldown_minutes=0)
+    mock.set_mode("out_of_stock", GPU)
+    check_product(ctx, product.id)
+    mock.set_mode("ok", GPU)
+    mock.set_price(GPU, "600.00")  # back, and 25% cheaper: held first
+    assert check_product(ctx, product.id).status == "pending"
+    assert reload(ctx, product).availability == "out_of_stock" and ctx.notifiers["mock"].sent == []
+    ctx.now.advance(minutes=15)
+    assert check_product(ctx, product.id).status == "ok"
+    [message] = ctx.notifiers["mock"].sent
+    assert message.startswith("BACK IN STOCK") and "Current price: $600.00" in message
+    assert "Last price before it went out of stock: $800.00" in message
+    assert "Savings" not in message and "Target price" not in message and "Discount" not in message
+    assert reload(ctx, product).availability == "in_stock"
+
+
+def test_back_in_stock_with_providers_that_do_not_state_the_stock(ctx):
+    from app.providers.mock import MockProvider
+
+    class SilentAboutStock(MockProvider):
+        stock = "out_of_stock"
+
+        def fetch_product(self, asin, marketplace):
+            from dataclasses import replace
+
+            data = super().fetch_product(asin, marketplace)
+            return replace(data, availability=self.stock, price=None if self.stock == "nothing" else data.price)
+
+    provider = SilentAboutStock()
+    ctx.providers["mock"] = provider
+    provider.stock = "in_stock"
+    product = add(ctx, "back_in_stock", None, cooldown_minutes=0)
+    provider.stock = "out_of_stock"
+    check_product(ctx, product.id)
+    provider.stock = "unknown"
+    provider.set_mode("no_price", GPU)  # an answer with no price and no stock statement
+    check_product(ctx, product.id)
+    assert reload(ctx, product).availability == "out_of_stock"  # not erased by an answer that says nothing
+    provider.set_mode("ok", GPU)
+    assert check_product(ctx, product.id).status == "ok"  # a valid offer, stock still not stated
+    assert len(ctx.notifiers["mock"].sent) == 1 and ctx.notifiers["mock"].sent[0].startswith("BACK IN STOCK")
+    assert reload(ctx, product).availability == "unknown"
+
+
+def test_skipped_check_is_attributed_to_the_provider_that_hit_its_limit(tmp_path):
+    ctx = paid_ctx(tmp_path, both_ok([]), canopy_max_monthly_requests=0, apify_token="")
+    result = check_product(ctx, tracked(ctx))
+    assert (result.status, result.category) == ("skipped", "provider_quota")
+    with ctx.sessions() as session:
+        rows = [(r.provider, r.category) for r in session.scalars(select(ProviderRequest))]
+    assert rows == [("canopy", "skipped_provider_quota")]  # not the unconfigured Apify that came last
+    ctx.close()
+
+
+def test_failed_backup_leaves_no_file_and_is_retried(ctx, monkeypatch):
+    import sqlite3
+
+    real_connect = sqlite3.connect
+
+    class Failing:
+        def __init__(self, connection):
+            self.connection = connection
+
+        def backup(self, target):
+            raise sqlite3.OperationalError("disk I/O error")
+
+        def close(self):
+            self.connection.close()
+
+    def connect(path, *args, **kwargs):
+        connection = real_connect(path, *args, **kwargs)
+        return Failing(connection) if str(path).endswith("monitor.db") else connection
+
+    monkeypatch.setattr("app.backup.sqlite3.connect", connect)
+    with pytest.raises(sqlite3.OperationalError):
+        backup.run_scheduled(ctx.settings, ctx.now())
+    assert list(backup.backup_dir(ctx.settings).iterdir()) == []  # no partial file, no leftover temporary file
+    monkeypatch.undo()
+    assert backup.run_scheduled(ctx.settings, ctx.now()) is not None  # the next tick tries again at once
+
+
+def test_manual_backups_are_kept_apart_from_the_automatic_ones(ctx):
+    ctx.settings.backup_keep = 2
+    manual = backup.backup(ctx.settings, ctx.now(), manual=True)
+    assert manual.name.startswith("manual-") and manual.stat().st_mode & 0o777 == 0o600
+    assert backup.backup_dir(ctx.settings).stat().st_mode & 0o777 == 0o700
+    assert (
+        backup.run_scheduled(ctx.settings, ctx.now()) is not None
+    )  # a manual backup does not replace the scheduled one
+    for day in range(1, 5):
+        backup.run_scheduled(ctx.settings, ctx.now() + timedelta(days=day))
+    assert len(backup.list_backups(ctx.settings)) == 2 and manual.exists()  # retention never deletes a manual backup
+    assert backup.prune(ctx.settings, 50) == 0
+
+
+def test_provider_test_form_on_the_settings_page(ctx):
+    from tests.test_web import post, sign_in
+
+    web = sign_in(ctx)
+    fragment = post(web, "/settings/test-provider", provider="mock", input=GPU)
+    assert (
+        "Mock answered." in fragment.text
+        and "Would be recorded as $800.00" in fragment.text
+        and "<html" not in fragment.text
+    )
+    bad = post(web, "/settings/test-provider", provider="mock", input="https://example.com/dp/B0DEMOGPU1")
+    assert "No result (invalid_input)" in bad.text
+    assert web.post("/settings/test-provider", data={"provider": "mock", "input": GPU}).status_code == 403  # CSRF
+    web.__exit__(None, None, None)

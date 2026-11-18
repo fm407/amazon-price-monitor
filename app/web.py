@@ -5,7 +5,7 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, ValidationError
@@ -449,10 +449,15 @@ def settings_page(request: Request, ctx: AppContext = Depends(get_ctx), session:
 
 
 @router.post("/settings/test-provider")
-async def test_provider(request: Request, ctx: AppContext = Depends(get_ctx)):
-    form = await request.form()
+def test_provider(
+    request: Request,
+    provider: str = Form(""),
+    input: str = Form(""),
+    ctx: AppContext = Depends(get_ctx),  # noqa: A002
+):
+    # A plain function: it runs in the thread pool, so a slow provider cannot stall other requests.
     try:
-        report = api.run_provider_test(ctx, str(form.get("provider", "")), str(form.get("input", "")))
+        report = api.run_provider_test(ctx, provider, input)
     except InvalidProductInput as exc:
         report = {"ok": False, "category": "invalid_input", "message": str(exc)}
     return render(request, "_provider_test.html", r=report)

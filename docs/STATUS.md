@@ -15,6 +15,7 @@ Last updated: 2026-11-18. Version 1.0.0.
 | 7 | Apify, fallback, cost controls | `milestone-7-apify-cost-controls` | merged |
 | 8 | Security hardening, Docker verification, documentation | `milestone-8-hardening-docs` | merged |
 | 9 | Per-provider monthly limits, ordered fallback list, SerpApi, Easyparser and Scrapingdog | `feature-per-provider-quotas` | merged |
+| 10 | Provider test action, confirmation of large drops, pacing, back-in-stock alerts, scheduled backups | `feature-trust-and-ops` | merged |
 
 Each milestone was developed on its own branch and merged into `main` with a merge commit after
 `scripts/check.sh` passed. The repository has one maintainer, so merges were verified locally
@@ -66,7 +67,7 @@ Verified means: exercised by an automated test or by the Docker script on 2026-1
 | Container restarts preserve data | verified | Docker script |
 | Health checks work | verified | Docker script |
 | No secrets exposed | verified | `test_system_endpoints_never_expose_secrets`, log checks |
-| Automated tests pass | verified | 297 passed locally and in the container |
+| Automated tests pass | verified | 322 passed locally and in the container |
 | Documentation complete | done | This folder |
 
 ## Awaiting live verification
@@ -95,6 +96,9 @@ format was taken from Discord's official documentation repository on GitHub inst
 
 ## Known limitations
 
+- Confirmation of large drops is off by default. When it is on, a confirmed alert arrives one recheck later (15 minutes by default), and the second reading may come from a provider that costs money.
+- Back-in-stock alerts depend on a check that reported the product out of stock. Providers that never state the stock cannot start one.
+- Scheduled backups stay inside the data volume. Copy them elsewhere to protect against losing the disk.
 - When several providers serve one product, small differences between their prices can look like price changes.
 - SerpApi may serve a result that is up to one hour old from its cache.
 - Easyparser never names the seller, so it is skipped for products set to "Amazon as seller only".

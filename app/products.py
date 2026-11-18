@@ -11,7 +11,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.amazon import parse_product_input
-from app.checker import CheckResult, check_product, placeholder_title
+from app.checker import CheckResult, check_product, clear_pending, placeholder_title
 from app.context import AppContext
 from app.models import PriceObservation, Product
 from app.money import from_minor
@@ -114,6 +114,7 @@ def update_product(ctx: AppContext, product: Product, values: dict[str, Any]) ->
 
 def set_status(ctx: AppContext, product: Product, status: str) -> None:
     product.status = status
+    clear_pending(product)  # a held reading does not survive a pause or a resume
     if status == "active":
         product.consecutive_failures = 0
         product.next_check_at = ctx.now() + timedelta(seconds=ctx.rng.uniform(5, 60))

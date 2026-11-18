@@ -50,9 +50,9 @@ Run on 2026-11-18.
 |---|---|
 | `ruff check` (includes security rules) | passed |
 | `ruff format --check` | passed |
-| `mypy` | passed, 30 source files |
-| `pytest` on macOS, Python 3.14 | 297 passed |
-| `pytest` in the Linux container, Python 3.14 | 297 passed |
+| `mypy` | passed, 31 source files |
+| `pytest` on macOS, Python 3.14 | 322 passed |
+| `pytest` in the Linux container, Python 3.14 | 322 passed |
 | Line coverage | 95% |
 | `pip-audit` | no known vulnerabilities |
 | `scripts/docker_test.sh` | all checks passed |
@@ -68,6 +68,7 @@ Run on 2026-11-18.
 | `test_apify.py` | unit and integration | Run lifecycle, failed runs, timeouts, field mapping, fallback, reported cost, budget notice |
 | `test_free_tier_providers.py` | unit and integration | SerpApi, Easyparser and Scrapingdog requests and mapping, shared error handling, strict amount parsing, key redaction, seller capability, three free plans used in turn |
 | `test_quotas.py` | integration | Per-provider monthly limits, spill-over to the next provider, restart persistence, interaction with the global budget |
+| `test_trust_and_ops.py` | integration | Provider test action, confirmation of large drops, pacing of monthly limits, back-in-stock alerts, scheduled backups |
 | `test_checker.py` | integration | Product creation, history, invalid responses, shipping, retries, rate limits, concurrency, deletion during a check, scheduler, restart recovery, budget and daily limits |
 | `test_e2e.py` | end to end | The specification scenario including a restart, and one scenario per alert type |
 | `test_notify.py` | integration | Discord payload, escaping, retries, permanent failures, secret redaction, email |

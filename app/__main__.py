@@ -20,7 +20,7 @@ from app.security import reset_admin
 
 def main() -> None:
     if sys.argv[1:] == ["backup"]:
-        sys.stdout.write(f"Backup written to {backup(Settings(), utcnow())}\n")
+        sys.stdout.write(f"Backup written to {backup(Settings(), utcnow(), manual=True)}\n")
         return
     if len(sys.argv) == 3 and sys.argv[1] == "restore":
         restore(Settings(), Path(sys.argv[2]))

@@ -191,15 +191,25 @@ def alert_text(
     headline = (
         "BACK IN STOCK" if event.rule_kind == "back_in_stock" else HEADLINES.get(event.event_type, HEADLINES["trigger"])
     )
+    if event.rule_kind == "back_in_stock":
+        # No target and no savings here: this alert is about availability, not about a threshold.
+        price_lines = [
+            f"Current price: {format_money(price, currency)}",
+            f"Last price before it went out of stock: {format_money(reference, currency)}",
+        ]
+    else:
+        price_lines = [
+            f"Previous reference price: {format_money(reference, currency)}",
+            f"Current price: {format_money(price, currency)}",
+            f"Discount: {discount}%" if discount is not None else "Discount: unknown",
+            f"Target price: {format_money(event.target_minor, currency)}",
+            f"Savings: {savings}",
+        ]
     lines = [
         headline,
         "",
         f"Product: {product.title}",
-        f"Previous reference price: {format_money(reference, currency)}",
-        f"Current price: {format_money(price, currency)}",
-        f"Discount: {discount}%" if discount is not None else "Discount: unknown",
-        f"Target price: {format_money(event.target_minor, currency)}",
-        f"Savings: {savings}",
+        *price_lines,
         f"Shipping: {shipping}",
         f"Seller: {observation.seller or 'unknown'}",
         f"Condition: {observation.condition}",
