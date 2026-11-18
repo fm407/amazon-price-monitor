@@ -14,10 +14,10 @@
     <section class="card mb-3">
       <div class="card-header">Price providers</div>
       <div class="table-responsive"><table class="table table-sm mb-0 align-middle">
-        <thead><tr><th>Provider</th><th>Role</th><th>Health</th><th>Est. cost per request</th></tr></thead>
+        <thead><tr><th>Provider</th><th>Role</th><th>Health</th><th>Used this month</th><th>Own monthly limit</th><th>Est. cost per request</th></tr></thead>
         <tbody>
           {% for r in provider_rows %}
-          <tr><td>{{ r.name|capitalize }}</td><td>{{ r.role }}</td><td>{{ r.health }}</td><td class="num">{{ r.estimated_cost_per_request_usd|usd }}</td></tr>
+          <tr><td>{{ r.name|capitalize }}</td><td>{{ r.role }}</td><td>{{ r.health }}</td><td class="num">{{ r.month_requests }} requests, {{ r.month_cost_usd|usd }}</td><td>{{ r.monthly_limit or "none" }}</td><td class="num">{{ r.estimated_cost_per_request_usd|usd }}</td></tr>
           {% endfor %}
         </tbody>
       </table></div>

@@ -43,6 +43,8 @@ class Settings(BaseSettings):
     canopy_base_url: str = "https://rest.canopyapi.co"
     canopy_cost_per_request_usd: Decimal = Decimal("0.01")
     canopy_max_concurrency: int = 2
+    canopy_max_monthly_requests: int | None = None  # e.g. 100 for a free plan
+    canopy_max_monthly_spend_usd: Decimal | None = None
 
     apify_token: str = ""
     apify_actor_id: str = ""
@@ -53,6 +55,8 @@ class Settings(BaseSettings):
     apify_max_charge_per_run_usd: Decimal | None = None
     apify_run_timeout_seconds: int = 180
     apify_max_concurrency: int = 1
+    apify_max_monthly_requests: int | None = None
+    apify_max_monthly_spend_usd: Decimal | None = None  # e.g. 5.00 for the free plan credit
 
     # Cost controls
     allow_paid_api_requests: bool = False
@@ -77,7 +81,15 @@ class Settings(BaseSettings):
     smtp_to: str = ""
     notify_mock_enabled: bool | None = None  # default: on when PROVIDER=mock
 
-    @field_validator("apify_max_charge_per_run_usd", "notify_mock_enabled", mode="before")
+    @field_validator(
+        "apify_max_charge_per_run_usd",
+        "notify_mock_enabled",
+        "canopy_max_monthly_requests",
+        "canopy_max_monthly_spend_usd",
+        "apify_max_monthly_requests",
+        "apify_max_monthly_spend_usd",
+        mode="before",
+    )
     @classmethod
     def _blank_means_unset(cls, value: object) -> object:
         """`KEY=` in .env means "not set" for optional values."""
@@ -87,12 +99,16 @@ class Settings(BaseSettings):
     def _validate(self) -> "Settings":
         if self.provider not in PROVIDER_NAMES:
             raise ValueError(f"PROVIDER must be one of {PROVIDER_NAMES}")
-        if self.fallback_provider:
-            if self.fallback_provider not in PAID_PROVIDERS:
+        fallbacks = self.fallback_providers
+        if fallbacks:
+            if self.provider == "mock":
+                raise ValueError("FALLBACK_PROVIDER cannot be used with PROVIDER=mock")
+            for name in fallbacks:
                 # A mock fallback would mix fictional prices into real history.
-                raise ValueError(f"FALLBACK_PROVIDER must be empty or one of {PAID_PROVIDERS}")
-            if self.fallback_provider == self.provider or self.provider == "mock":
-                raise ValueError("FALLBACK_PROVIDER must differ from PROVIDER, and PROVIDER must not be mock")
+                if name not in PAID_PROVIDERS:
+                    raise ValueError(f"FALLBACK_PROVIDER entries must be one of {PAID_PROVIDERS}")
+            if self.provider in fallbacks or len(set(fallbacks)) != len(fallbacks):
+                raise ValueError("FALLBACK_PROVIDER must not repeat a provider or contain PROVIDER itself")
         for name in ("secret_key", "api_token"):
             value = getattr(self, name)
             if value and len(value) < MIN_SECRET_LENGTH:
@@ -120,6 +136,11 @@ class Settings(BaseSettings):
         if not self.database_url:
             self.database_url = f"sqlite:///{(self.data_dir / 'monitor.db').resolve()}"
         return self
+
+    @property
+    def fallback_providers(self) -> list[str]:
+        """FALLBACK_PROVIDER is one name or a comma-separated list, tried in order."""
+        return [name.strip().lower() for name in self.fallback_provider.split(",") if name.strip()]
 
     @property
     def tz(self) -> ZoneInfo:

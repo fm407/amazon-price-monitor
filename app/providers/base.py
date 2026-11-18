@@ -55,6 +55,9 @@ class PriceProvider(Protocol):
     is_paid: bool
     cost_per_request_usd: Decimal
     max_concurrency: int
+    # Optional per-provider monthly limits, for example to stay inside a free plan.
+    max_monthly_requests: int | None
+    max_monthly_spend_usd: Decimal | None
 
     @property
     def configured(self) -> bool: ...

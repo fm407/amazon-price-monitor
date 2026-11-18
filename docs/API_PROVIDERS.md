@@ -155,14 +155,57 @@ PROVIDER=canopy
 FALLBACK_PROVIDER=apify
 ```
 
-The fallback is tried only when the primary provider itself fails: authentication, quota, rate limit,
-timeout, network error, server error or malformed response. It is **not** tried when:
+The fallback is tried when the primary provider itself fails (authentication, quota, rate limit,
+timeout, network error, server error or malformed response) or has reached its own monthly limit.
+It is **not** tried when:
 
 - the primary provider answered that the product does not exist or has no price, or
-- the request was skipped because of the budget, the daily limit or `ALLOW_PAID_API_REQUESTS=false`.
+- the request was skipped because of the global budget, the daily limit or `ALLOW_PAID_API_REQUESTS=false`.
 
 A product can also use a specific provider. Open the product and change **Provider** under
 *Monitoring settings*. The stored product and its history stay the same.
+
+## Using several free plans together
+
+Each paid provider can have its own monthly limit. When a provider reaches its limit, the next
+provider in the chain takes over. When every provider has reached its limit, checks are skipped
+until the next calendar month (UTC). The application stays online.
+
+Example: use Apify's monthly credit first, then Canopy's free requests.
+
+```ini
+PROVIDER=apify
+FALLBACK_PROVIDER=canopy
+ALLOW_PAID_API_REQUESTS=true
+
+APIFY_TOKEN=your-token
+APIFY_ACTOR_ID=username/actor-name
+APIFY_MAX_MONTHLY_SPEND_USD=5.00       # stop Apify at the free credit
+
+CANOPY_API_KEY=your-key
+CANOPY_MAX_MONTHLY_REQUESTS=100        # stop Canopy at the free request count
+CANOPY_COST_PER_REQUEST_USD=0          # free requests cost nothing
+
+MAX_MONTHLY_API_SPEND_USD=5.00         # global safety net across all providers
+```
+
+| Setting | Counts |
+|---|---|
+| `<PROVIDER>_MAX_MONTHLY_REQUESTS` | Every request sent to that provider this month, including failed ones and retries. |
+| `<PROVIDER>_MAX_MONTHLY_SPEND_USD` | That provider's cost this month: the reported cost when the provider reports it, your estimate otherwise. |
+
+Rules:
+
+- `FALLBACK_PROVIDER` takes one name or a comma-separated list. Providers are tried in that order.
+- A provider's own limit moves the check on to the next provider. The global limits
+  (`MAX_MONTHLY_API_SPEND_USD`, `MAX_DAILY_API_REQUESTS`, `ALLOW_PAID_API_REQUESTS`) stop the check
+  for every provider.
+- **Settings** shows, per provider, the requests and cost used this month and its limit.
+- Check your free plan's real numbers in the provider's dashboard. Free plans change.
+- Set the limit a little below the plan's allowance if you also use the key elsewhere.
+
+How far a free plan goes: requests per month = products x (43,200 / check interval in minutes).
+With 100 free requests, that is 3 products checked once a day.
 
 ## Spending safeguards
 

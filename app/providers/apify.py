@@ -106,6 +106,8 @@ def _cost(run: dict[str, Any]) -> Decimal | None:
 class ApifyProvider:
     name = "apify"
     is_paid = True
+    max_monthly_requests: int | None = None
+    max_monthly_spend_usd: Decimal | None = None
 
     def __init__(
         self,

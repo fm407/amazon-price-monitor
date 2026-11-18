@@ -39,6 +39,8 @@ RAW_KEYS = ("asin", "price", "recommendedRetailPrice", "isNew", "isInStock", "is
 class CanopyProvider:
     name = "canopy"
     is_paid = True
+    max_monthly_requests: int | None = None
+    max_monthly_spend_usd: Decimal | None = None
 
     def __init__(
         self,

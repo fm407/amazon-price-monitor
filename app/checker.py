@@ -27,7 +27,7 @@ RAW_LIMIT_BYTES = 4000
 # Failures of the provider itself. Only these justify trying the fallback provider.
 FALLBACK_CATEGORIES = {
     "auth", "quota", "rate_limited", "timeout", "network", "http_error", "malformed",
-    "not_configured", "run_failed", "unsupported_marketplace", "provider_blocked", "internal",
+    "not_configured", "run_failed", "unsupported_marketplace", "provider_blocked", "provider_quota", "internal",
 }  # fmt: skip
 # Failures worth retrying sooner than the normal interval.
 TRANSIENT_CATEGORIES = {
@@ -60,9 +60,9 @@ class FetchFailure:
 def provider_chain(ctx: AppContext, product_provider: str | None) -> list[str]:
     primary = product_provider if product_provider in ctx.providers else ctx.settings.provider
     chain = [primary] if primary in ctx.providers else []
-    fallback = ctx.settings.fallback_provider
-    if fallback and fallback != primary and fallback in ctx.providers:
-        chain.append(fallback)
+    for fallback in ctx.settings.fallback_providers:
+        if fallback not in chain and fallback in ctx.providers:
+            chain.append(fallback)
     return chain
 
 
@@ -126,8 +126,12 @@ def fetch(
         for attempt in range(max(1, ctx.settings.provider_max_attempts)):
             request_id, denial = budget.reserve(ctx, provider, product_id, asin, attempt)
             if request_id is None:
-                # Budget denials end the whole chain: never fall back to another paid provider.
                 assert denial is not None  # noqa: S101
+                if denial == "provider_quota":
+                    # This provider's own allowance is used up. The next provider in the chain may still have one.
+                    failure = FetchFailure(denial, budget.DENIAL_MESSAGES[denial], skipped=True)
+                    break
+                # Global budget denials end the whole chain: never fall back to another paid provider.
                 if denial == "monthly_budget":
                     budget.notify_exhausted_once(ctx)
                 return None, name, FetchFailure(denial, budget.DENIAL_MESSAGES[denial], skipped=True)

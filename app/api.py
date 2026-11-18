@@ -357,6 +357,12 @@ def provider_status(ctx: AppContext, session: Session) -> list[dict[str, Any]]:
             .limit(1)
         )
         blocked = ctx.blocked_until.get(name)
+        month_requests, month_micro = budget.provider_month(session, name, now)
+        limits = []
+        if provider.max_monthly_requests is not None:
+            limits.append(f"{provider.max_monthly_requests} requests")
+        if provider.max_monthly_spend_usd is not None:
+            limits.append(f"${provider.max_monthly_spend_usd}")
         if not provider.configured:
             health = "not configured"
         elif blocked and blocked > now:
@@ -373,6 +379,9 @@ def provider_status(ctx: AppContext, session: Session) -> list[dict[str, Any]]:
                 "paid": provider.is_paid,
                 "estimated_cost_per_request_usd": str(provider.cost_per_request_usd),
                 "health": health,
+                "month_requests": month_requests,
+                "month_cost_usd": str(micro_to_usd(month_micro)),
+                "monthly_limit": " or ".join(limits) or None,
                 "paused_until": blocked if blocked and blocked > now else None,
                 "last_request_at": last.started_at if last else None,
             }
@@ -421,7 +430,7 @@ def settings_report(ctx: AppContext) -> dict[str, Any]:
     return {
         "version": __version__,
         "provider": s.provider,
-        "fallback_provider": s.fallback_provider or None,
+        "fallback_provider": ", ".join(s.fallback_providers) or None,
         "demo_mode": s.demo_mode,
         "timezone": s.timezone,
         "default_check_interval_minutes": s.default_check_interval_minutes,
