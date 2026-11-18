@@ -1,0 +1,29 @@
+services:
+  app:
+    build: .
+    image: amazon-price-monitor:local
+    container_name: amazon-price-monitor
+    init: true
+    restart: unless-stopped
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      DATA_DIR: /app/data
+    ports:
+      # Loopback only by default. See docs/DOCKER.md before changing BIND_ADDRESS.
+      - "${BIND_ADDRESS:-127.0.0.1}:${HOST_PORT:-8080}:8080"
+    volumes:
+      - amazon-price-monitor-data:/app/data
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    stop_grace_period: 30s
+
+volumes:
+  amazon-price-monitor-data:
+    name: amazon-price-monitor-data

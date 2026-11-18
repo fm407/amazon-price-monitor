@@ -1,0 +1,129 @@
+"""Environment-based configuration. Secrets may also come from /run/secrets files."""
+
+from decimal import Decimal
+from pathlib import Path
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
+from pydantic import model_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+SECRETS_DIR = Path("/run/secrets")
+PROVIDER_NAMES = ("mock", "canopy", "apify")
+PAID_PROVIDERS = ("canopy", "apify")
+
+
+class Settings(BaseSettings):
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        extra="ignore",
+        secrets_dir=str(SECRETS_DIR) if SECRETS_DIR.is_dir() else None,
+    )
+
+    # Application
+    log_level: str = "INFO"
+    data_dir: Path = Path("data")
+    database_url: str = ""
+    timezone: str = "America/New_York"
+    secret_key: str = ""  # generated and persisted in data_dir when empty
+    api_token: str = ""  # optional bearer token for REST clients
+    session_cookie_secure: bool = False
+    session_max_age_hours: int = 168
+
+    # Providers
+    provider: str = "mock"
+    fallback_provider: str = ""
+    demo_mode: bool = False
+    http_timeout_seconds: float = 20.0
+    provider_max_attempts: int = 3
+
+    canopy_api_key: str = ""
+    canopy_base_url: str = "https://rest.canopyapi.co"
+    canopy_cost_per_request_usd: Decimal = Decimal("0.01")
+    canopy_max_concurrency: int = 2
+
+    apify_token: str = ""
+    apify_actor_id: str = ""
+    apify_base_url: str = "https://api.apify.com"
+    apify_input_template: str = '{"categoryOrProductUrls": [{"url": "{url}"}], "maxItemsPerStartUrl": 1}'
+    apify_field_map: str = ""  # JSON object overriding the default output mapping
+    apify_cost_per_run_usd: Decimal = Decimal("0.01")
+    apify_max_charge_per_run_usd: Decimal | None = None
+    apify_run_timeout_seconds: int = 180
+    apify_max_concurrency: int = 1
+
+    # Cost controls
+    allow_paid_api_requests: bool = False
+    max_monthly_api_spend_usd: Decimal = Decimal("5.00")
+    max_daily_api_requests: int = 100
+    default_check_interval_minutes: int = 360
+
+    # Scheduler
+    scheduler_enabled: bool = True
+    scheduler_tick_seconds: float = 30.0
+    scheduler_batch_size: int = 5
+
+    # Notifications
+    telegram_enabled: bool = True
+    telegram_bot_token: str = ""
+    telegram_chat_id: str = ""
+    telegram_api_base_url: str = "https://api.telegram.org"
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_security: str = "starttls"  # starttls | ssl | none
+    smtp_username: str = ""
+    smtp_password: str = ""
+    smtp_from: str = ""
+    smtp_to: str = ""
+    notify_mock_enabled: bool | None = None  # default: on when PROVIDER=mock
+
+    @model_validator(mode="after")
+    def _validate(self) -> "Settings":
+        if self.provider not in PROVIDER_NAMES:
+            raise ValueError(f"PROVIDER must be one of {PROVIDER_NAMES}")
+        if self.fallback_provider:
+            if self.fallback_provider not in PAID_PROVIDERS:
+                # A mock fallback would mix fictional prices into real history.
+                raise ValueError(f"FALLBACK_PROVIDER must be empty or one of {PAID_PROVIDERS}")
+            if self.fallback_provider == self.provider or self.provider == "mock":
+                raise ValueError("FALLBACK_PROVIDER must differ from PROVIDER, and PROVIDER must not be mock")
+        if self.demo_mode and self.provider != "mock":
+            raise ValueError("DEMO_MODE=true requires PROVIDER=mock")
+        if self.smtp_security not in ("starttls", "ssl", "none"):
+            raise ValueError("SMTP_SECURITY must be starttls, ssl or none")
+        if self.default_check_interval_minutes < 5:
+            raise ValueError("DEFAULT_CHECK_INTERVAL_MINUTES must be at least 5")
+        try:
+            ZoneInfo(self.timezone)
+        except (ZoneInfoNotFoundError, ValueError) as exc:
+            raise ValueError(f"Unknown TIMEZONE: {self.timezone}") from exc
+        if not self.database_url:
+            self.database_url = f"sqlite:///{(self.data_dir / 'monitor.db').resolve()}"
+        return self
+
+    @property
+    def tz(self) -> ZoneInfo:
+        return ZoneInfo(self.timezone)
+
+    @property
+    def mock_notifier_enabled(self) -> bool:
+        return self.provider == "mock" if self.notify_mock_enabled is None else self.notify_mock_enabled
+
+    @property
+    def telegram_configured(self) -> bool:
+        return bool(self.telegram_enabled and self.telegram_bot_token and self.telegram_chat_id)
+
+    @property
+    def smtp_configured(self) -> bool:
+        return bool(self.smtp_host and self.smtp_to and self.smtp_from)
+
+    def secret_values(self) -> list[str]:
+        """Values that must never appear in logs or stored error text."""
+        candidates = [
+            self.secret_key,
+            self.api_token,
+            self.canopy_api_key,
+            self.apify_token,
+            self.telegram_bot_token,
+            self.smtp_password,
+        ]
+        return [value for value in candidates if len(value) >= 6]

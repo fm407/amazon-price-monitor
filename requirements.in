@@ -1,0 +1,11 @@
+fastapi
+uvicorn
+sqlalchemy>=2
+alembic
+pydantic>=2
+pydantic-settings
+httpx
+jinja2
+python-multipart
+itsdangerous
+tzdata

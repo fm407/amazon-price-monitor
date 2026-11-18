@@ -1,0 +1,17 @@
+.env
+.env.*
+!.env.example
+secrets/
+data/
+*.db
+*.db-wal
+*.db-shm
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+backups/
