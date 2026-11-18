@@ -10,7 +10,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from app import budget
+from app import alerts, budget, notify
 from app.context import AppContext
 from app.logging_config import job_id_var
 from app.models import PriceObservation, Product
@@ -274,7 +274,10 @@ def _apply(
         schedule_next(ctx, product, now)
         log.info("no valid price", extra={"product_id": product.id, "reason": rejected.code})
         return CheckResult("no_price", rejected.code, rejected.message, provider)
-    observation, _previous, _previous_low = record_observation(session, product, price, data, provider, now)
+    observation, previous, previous_low = record_observation(session, product, price, data, provider, now)
+    # Events and their deliveries are committed together with the observation, before anything is sent.
+    for event, rule in alerts.evaluate_rules(session, product, observation, previous, previous_low, now):
+        notify.queue_alert(session, ctx, event, rule, product, observation)
     schedule_next(ctx, product, now)
     return CheckResult("ok", "ok", "", provider, observation.id)
 
@@ -299,6 +302,8 @@ def check_product(ctx: AppContext, product_id: int) -> CheckResult:
                 return CheckResult("deleted", "deleted", "The product was deleted during the check.")
             result = _apply(ctx, session, product, data, provider, failure)
             session.commit()
+        if result.status == "ok":
+            notify.deliver_pending(ctx)
         log.info(
             "product check finished",
             extra={"product_id": product_id, "status": result.status, "category": result.category},

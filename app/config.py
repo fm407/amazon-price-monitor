@@ -2,6 +2,7 @@
 
 from decimal import Decimal
 from pathlib import Path
+from urllib.parse import urlsplit
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from pydantic import model_validator
@@ -10,6 +11,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 SECRETS_DIR = Path("/run/secrets")
 PROVIDER_NAMES = ("mock", "canopy", "apify")
 PAID_PROVIDERS = ("canopy", "apify")
+DISCORD_HOSTS = ("discord.com", "discordapp.com", "ptb.discord.com", "canary.discord.com")
 
 
 class Settings(BaseSettings):
@@ -63,10 +65,8 @@ class Settings(BaseSettings):
     scheduler_batch_size: int = 5
 
     # Notifications
-    telegram_enabled: bool = True
-    telegram_bot_token: str = ""
-    telegram_chat_id: str = ""
-    telegram_api_base_url: str = "https://api.telegram.org"
+    discord_enabled: bool = True
+    discord_webhook_url: str = ""  # secret: the URL contains the webhook token
     smtp_host: str = ""
     smtp_port: int = 587
     smtp_security: str = "starttls"  # starttls | ssl | none
@@ -88,6 +88,14 @@ class Settings(BaseSettings):
                 raise ValueError("FALLBACK_PROVIDER must differ from PROVIDER, and PROVIDER must not be mock")
         if self.demo_mode and self.provider != "mock":
             raise ValueError("DEMO_MODE=true requires PROVIDER=mock")
+        if self.discord_webhook_url:
+            parts = urlsplit(self.discord_webhook_url)
+            if (
+                parts.scheme != "https"
+                or parts.hostname not in DISCORD_HOSTS
+                or not parts.path.startswith("/api/webhooks/")
+            ):
+                raise ValueError("DISCORD_WEBHOOK_URL must look like https://discord.com/api/webhooks/<id>/<token>")
         if self.smtp_security not in ("starttls", "ssl", "none"):
             raise ValueError("SMTP_SECURITY must be starttls, ssl or none")
         if self.default_check_interval_minutes < 5:
@@ -109,8 +117,8 @@ class Settings(BaseSettings):
         return self.provider == "mock" if self.notify_mock_enabled is None else self.notify_mock_enabled
 
     @property
-    def telegram_configured(self) -> bool:
-        return bool(self.telegram_enabled and self.telegram_bot_token and self.telegram_chat_id)
+    def discord_configured(self) -> bool:
+        return bool(self.discord_enabled and self.discord_webhook_url)
 
     @property
     def smtp_configured(self) -> bool:
@@ -123,7 +131,8 @@ class Settings(BaseSettings):
             self.api_token,
             self.canopy_api_key,
             self.apify_token,
-            self.telegram_bot_token,
+            self.discord_webhook_url,
+            self.discord_webhook_url.rstrip("/").rsplit("/", 1)[-1],  # the token part alone
             self.smtp_password,
         ]
         return [value for value in candidates if len(value) >= 6]

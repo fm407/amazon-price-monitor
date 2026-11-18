@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from app.config import Settings
 from app.db import make_engine, utcnow
+from app.notify import Notifier, build_notifiers
 from app.providers import PriceProvider, build_providers
 
 
@@ -24,12 +25,13 @@ class AppContext:
     sessions: sessionmaker[Session]
     http: httpx.Client
     providers: dict[str, PriceProvider]
-    notifiers: dict[str, Any] = field(default_factory=dict)
+    notifiers: dict[str, Notifier] = field(default_factory=dict)
     now: Callable[[], datetime] = utcnow
     sleep: Callable[[float], Any] = time.sleep
     rng: random.Random = field(default_factory=random.Random)
     # Single-process guards. They are valid because exactly one worker process runs.
     budget_lock: threading.Lock = field(default_factory=threading.Lock)
+    delivery_lock: threading.Lock = field(default_factory=threading.Lock)
     blocked_until: dict[str, datetime] = field(default_factory=dict)
     _inflight: set[int] = field(default_factory=set)
     _inflight_lock: threading.Lock = field(default_factory=threading.Lock)
@@ -62,6 +64,7 @@ def build_context(
     *,
     http: httpx.Client | None = None,
     providers: dict[str, PriceProvider] | None = None,
+    notifiers: dict[str, Notifier] | None = None,
 ) -> AppContext:
     engine = make_engine(settings.database_url)
     http = http or httpx.Client(
@@ -75,4 +78,5 @@ def build_context(
         sessions=sessionmaker(engine, expire_on_commit=False),
         http=http,
         providers=providers if providers is not None else build_providers(settings, http),
+        notifiers=notifiers if notifiers is not None else build_notifiers(settings, http),
     )

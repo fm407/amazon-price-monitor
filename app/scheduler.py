@@ -12,7 +12,7 @@ from datetime import datetime, timedelta
 
 from sqlalchemy import select
 
-from app import budget
+from app import budget, notify
 from app.checker import CheckResult, check_product
 from app.context import AppContext
 from app.models import Product
@@ -87,6 +87,7 @@ class Scheduler:
     def run_once(self) -> list[CheckResult]:
         """Check every due product (bounded batch) and wait for the batch to finish."""
         results = list(self._pool.map(lambda product_id: check_product(self.ctx, product_id), self.due_product_ids()))
+        notify.deliver_pending(self.ctx)  # also retries deliveries that failed earlier
         self.last_tick_at = self.ctx.now()
         return results
 
