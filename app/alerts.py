@@ -17,8 +17,10 @@ from sqlalchemy.orm import Session
 
 from app.amazon import MARKETPLACES
 from app.models import (
+    BACK_IN_STOCK,
     FIXED_TARGET,
     NEW_LOW,
+    NO_THRESHOLD_KINDS,
     PCT_BELOW_AVERAGE,
     PCT_BELOW_BASELINE,
     PCT_DROP_SINCE_LAST,
@@ -41,6 +43,7 @@ KIND_LABELS = {
     PCT_BELOW_AVERAGE: "Percent below historical average",
     NEW_LOW: "New historical low",
     PCT_DROP_SINCE_LAST: "Percent drop since last check",
+    BACK_IN_STOCK: "Back in stock",
 }
 
 
@@ -68,10 +71,10 @@ def rule_currency(product: Product) -> str:
 
 
 def encode_threshold(kind: str, value: object, currency: str) -> int:
-    """Percent kinds -> basis points; fixed target -> minor units; new low -> 0."""
+    """Percent kinds -> basis points; fixed target -> minor units; kinds without a threshold -> 0."""
     if kind not in RULE_KINDS:
         raise InvalidRule(f"Unknown alert type: {kind}")
-    if kind == NEW_LOW:
+    if kind in NO_THRESHOLD_KINDS:
         return 0
     try:
         amount = parse_amount(value)
@@ -96,6 +99,8 @@ def describe(rule: AlertRule, currency: str) -> str:
         return f"{percent} below the {rule.lookback_days}-day average"
     if rule.kind == NEW_LOW:
         return "New historical low"
+    if rule.kind == BACK_IN_STOCK:
+        return "Back in stock"
     return f"Drops {percent} or more since the last check"
 
 
@@ -168,6 +173,7 @@ def evaluate_condition(
     previous_minor: int | None,
     previous_low_minor: int | None,
     now: datetime,
+    previous_availability: str = "unknown",
 ) -> Condition | None:
     """Is the rule's condition met by this observation? None when it cannot be evaluated yet."""
     price = observation.price_minor
@@ -185,6 +191,11 @@ def evaluate_condition(
             return None  # not enough real history yet
         target = apply_discount(average, rule.threshold)
         return Condition(price <= target, target, average)
+    if rule.kind == BACK_IN_STOCK:
+        # Only a reported out-of-stock state followed by a valid price counts.
+        # A valid price means an offer can be bought, even when the provider does not state the stock.
+        returned = previous_availability == "out_of_stock" and observation.availability != "out_of_stock"
+        return Condition(returned, None, previous_minor)
     if rule.kind == NEW_LOW:
         if previous_low_minor is None:
             return None
@@ -227,13 +238,16 @@ def evaluate_rules(
     previous_minor: int | None,
     previous_low_minor: int | None,
     now: datetime,
+    previous_availability: str = "unknown",
 ) -> list[tuple[AlertEvent, AlertRule]]:
     """Evaluate every enabled rule against one valid observation and persist the resulting events."""
     events: list[tuple[AlertEvent, AlertRule]] = []
     for rule in product.rules:
         if not rule.enabled:
             continue
-        condition = evaluate_condition(session, rule, product, observation, previous_minor, previous_low_minor, now)
+        condition = evaluate_condition(
+            session, rule, product, observation, previous_minor, previous_low_minor, now, previous_availability
+        )
         if condition is None:
             continue
         event_type, rule.is_below = decide(rule, condition.below, observation.price_minor, now)

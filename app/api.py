@@ -1,6 +1,7 @@
 """REST API under /api/v1. Every route except the health checks requires authentication."""
 
 import os
+from datetime import UTC
 from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
@@ -8,7 +9,9 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 
 from app import __version__, alerts, budget, notify, products
-from app.checker import check_product, provider_chain
+from app.amazon import parse_product_input
+from app.backup import list_backups
+from app.checker import check_product, probe_provider, provider_chain
 from app.context import AppContext
 from app.models import AlertEvent, AlertRule, NotificationDelivery, Product, ProviderRequest
 from app.money import micro_to_usd, to_minor
@@ -29,6 +32,7 @@ from app.schemas import (
     ProductOut,
     ProductUpdate,
     ProviderRequestOut,
+    ProviderTest,
     alert_out,
     change_percent,
     delivery_out,
@@ -449,12 +453,29 @@ def settings_report(ctx: AppContext) -> dict[str, Any]:
         "smtp": "configured" if s.smtp_configured else "not configured",
         "notification_channels": list(ctx.notifiers),
         "api_token": "configured" if s.api_token else "not configured",
+        "confirm_drop_percent": str(s.confirm_drop_percent),
+        "pace_monthly_limits": s.pace_monthly_limits,
+        "backup_interval_hours": s.backup_interval_hours,
+        "last_backup_at": (lambda found: found[-1][0].replace(tzinfo=UTC) if found else None)(list_backups(s)),
     }
 
 
 @router.get("/providers", response_model=Envelope[list[dict[str, Any]]], tags=["system"])
 def providers_get(ctx: AppContext = Depends(get_ctx), session: Session = Depends(get_session)):
     return ok(provider_status(ctx, session))
+
+
+def run_provider_test(ctx: AppContext, name: str, text: str) -> dict[str, Any]:
+    if name not in ctx.providers:
+        raise HTTPException(status_code=404, detail="Unknown provider.")
+    identity = parse_product_input(text, client=ctx.http)
+    return probe_provider(ctx, name, identity.asin, identity.marketplace)
+
+
+@router.post("/providers/{name}/test", response_model=Envelope[dict[str, Any]], tags=["system"])
+def providers_test(name: str, body: ProviderTest, ctx: AppContext = Depends(get_ctx)):
+    """Send one real request to a provider and show the mapped result. Counts against the limits."""
+    return ok(run_provider_test(ctx, name, body.input))
 
 
 @router.get("/usage", response_model=Envelope[dict[str, Any]], tags=["system"])

@@ -7,7 +7,7 @@ checks cannot overspend. The ledger is persistent, so limits survive restarts.
 
 import logging
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from decimal import Decimal
 from typing import Any, cast
 
@@ -29,8 +29,12 @@ DENIAL_MESSAGES = {
     "monthly_budget": "The monthly API budget is exhausted.",
     "daily_limit": "The daily API request limit is reached.",
     "provider_quota": "This provider's own monthly limit is reached.",
+    "provider_paced": "This provider is ahead of its monthly pace. It is used again as the month goes on.",
     "provider_blocked": "The provider is temporarily paused after an authentication, quota or rate-limit error.",
 }
+# A provider's own limit or pace. The check moves on to the next provider instead of stopping, and
+# only the final outcome of the check is written to the ledger.
+PROVIDER_LIMIT_DENIALS = ("provider_quota", "provider_paced")
 _BILLED = func.coalesce(ProviderRequest.actual_cost_micro, ProviderRequest.estimated_cost_micro)
 _REAL = ProviderRequest.category.not_like("skipped%")
 
@@ -108,17 +112,44 @@ def provider_month(session: Session, name: str, now: datetime) -> tuple[int, int
     return count, int(billed or 0)
 
 
-def _provider_denial(session: Session, provider: PriceProvider, now: datetime, cost_micro: int) -> str | None:
+PACE_BURST = Decimal("0.10")  # share of a monthly limit that may be used ahead of schedule
+
+
+def month_fraction(now: datetime) -> Decimal:
+    """Elapsed share of the current calendar month, between 0 and 1."""
+    start = month_start(now)
+    following = (start + timedelta(days=32)).replace(day=1)
+    return Decimal((now - start).total_seconds()) / Decimal((following - start).total_seconds())
+
+
+def paced_allowance(limit: Decimal, now: datetime) -> Decimal:
+    """How much of a monthly limit may be used by now: the elapsed share plus a small burst."""
+    return min(limit, limit * month_fraction(now) + max(Decimal(1), limit * PACE_BURST))
+
+
+def _provider_denial(
+    session: Session, provider: PriceProvider, now: datetime, cost_micro: int, pace: bool
+) -> str | None:
     """A provider's own monthly limit. Unlike the global limits, it lets the next provider take over."""
     if provider.max_monthly_requests is None and provider.max_monthly_spend_usd is None:
         return None
     count, billed = provider_month(session, provider.name, now)
-    if provider.max_monthly_requests is not None and count >= provider.max_monthly_requests:
-        return "provider_quota"
-    if provider.max_monthly_spend_usd is not None and billed + cost_micro > usd_to_micro(
-        provider.max_monthly_spend_usd
-    ):
-        return "provider_quota"
+    if provider.max_monthly_requests is not None:
+        limit = Decimal(provider.max_monthly_requests)
+        if count >= limit:
+            return "provider_quota"
+        if pace and count + 1 > paced_allowance(limit, now):
+            return "provider_paced"
+    if provider.max_monthly_spend_usd is not None:
+        limit_micro = Decimal(usd_to_micro(provider.max_monthly_spend_usd))
+        if billed + cost_micro > limit_micro:
+            return "provider_quota"
+        if (
+            pace
+            and limit_micro > 0
+            and billed + cost_micro > limit_micro * month_fraction(now) + limit_micro * PACE_BURST
+        ):
+            return "provider_paced"
     return None
 
 
@@ -147,7 +178,7 @@ def reserve(
     with ctx.budget_lock, ctx.sessions() as session:
         reason = _denial(usage(session, ctx.settings, ctx.now()), cost_micro) if provider.is_paid else None
         if reason is None:
-            reason = _provider_denial(session, provider, ctx.now(), cost_micro)
+            reason = _provider_denial(session, provider, ctx.now(), cost_micro, ctx.settings.pace_monthly_limits)
         if reason is None:
             request = ProviderRequest(
                 provider=provider.name,
@@ -161,7 +192,8 @@ def reserve(
             session.add(request)
             session.commit()
             return request.id, None
-    record_skip(ctx, provider, product_id, asin, reason)
+    if reason not in PROVIDER_LIMIT_DENIALS:
+        record_skip(ctx, provider, product_id, asin, reason)
     return None, reason
 
 

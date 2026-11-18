@@ -1,0 +1,20 @@
+{% if not r.ok %}
+<div class="alert alert-danger py-2 mb-0" role="status"><strong>No result ({{ r.category }}).</strong> {{ r.message }}</div>
+{% else %}
+<div class="alert alert-{{ 'success' if r.usable else 'warning' }} py-2 mb-2" role="status">
+  <strong>{{ r.provider|provider }} answered.</strong> {{ r.verdict }}
+</div>
+<dl class="card-facts small mb-0">
+  <dt>Title</dt><dd>{{ r.title or 'not provided' }}</dd>
+  <dt>Price as sent</dt><dd class="num">{{ r.raw_price if r.raw_price is not none else 'not provided' }}</dd>
+  <dt>Currency</dt><dd>{{ r.currency or 'not provided' }}</dd>
+  <dt>List price</dt><dd class="num">{{ r.list_price if r.list_price is not none else 'not provided' }}</dd>
+  <dt>Shipping</dt><dd class="num">{{ r.shipping if r.shipping is not none else 'unknown' }}</dd>
+  <dt>Seller</dt><dd>{{ r.seller or 'not provided' }}</dd>
+  <dt>Condition</dt><dd>{{ r.condition }}</dd>
+  <dt>Availability</dt><dd>{{ {'in_stock': 'In stock', 'out_of_stock': 'Out of stock'}.get(r.availability, 'unknown') }}</dd>
+  <dt>Brand</dt><dd>{{ r.brand or 'not provided' }}</dd>
+  <dt>Image</dt><dd>{{ 'provided' if r.image_url else 'not provided' }}</dd>
+  {% if r.reported_cost_usd %}<dt>Cost reported</dt><dd class="num">{{ r.reported_cost_usd|usd }}</dd>{% endif %}
+</dl>
+{% endif %}

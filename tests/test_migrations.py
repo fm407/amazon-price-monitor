@@ -17,3 +17,30 @@ def test_migrations_build_schema_that_matches_models(tmp_path):
         assert conn.execute(text("PRAGMA foreign_keys")).scalar() == 1
         diff = compare_metadata(MigrationContext.configure(conn), Base.metadata)
     assert diff == []
+
+
+def test_upgrade_from_the_first_schema_keeps_existing_data(tmp_path):
+    from alembic import command
+
+    from app.db import alembic_config
+
+    url = f"sqlite:///{tmp_path / 'old.db'}"
+    command.upgrade(alembic_config(url), "0001")
+    engine = make_engine(url)
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                "INSERT INTO products (asin, marketplace, title, url, is_demo, status, seller_filter, include_used,"
+                " availability, created_at, consecutive_failures, latest_price_minor)"
+                " VALUES ('B0OLDDATA1', 'US', 'Kept', 'https://www.amazon.com/dp/B0OLDDATA1', 0, 'active', 'any', 0,"
+                " 'in_stock', '2026-11-01 00:00:00', 0, 12345)"
+            )
+        )
+    engine.dispose()
+    run_migrations(url)
+    engine = make_engine(url)
+    with engine.connect() as conn:
+        row = conn.execute(text("SELECT title, latest_price_minor, pending_price_minor FROM products")).one()
+        assert tuple(row) == ("Kept", 12345, None)
+        assert compare_metadata(MigrationContext.configure(conn), Base.metadata) == []
+    engine.dispose()

@@ -69,6 +69,9 @@ Generate a token with `openssl rand -hex 32`.
 | `MAX_MONTHLY_API_SPEND_USD` | `5.00` | Hard limit per calendar month (UTC) across all paid providers. |
 | `MAX_DAILY_API_REQUESTS` | `100` | Hard limit on paid requests per UTC day. |
 | `DEFAULT_CHECK_INTERVAL_MINUTES` | `360` | Check interval for products without their own interval. Minimum 5. |
+| `PACE_MONTHLY_LIMITS` | `true` | Spreads each provider's own monthly limit over the month: the elapsed share of the month plus 10%. A provider ahead of its pace hands over to the next one. |
+| `CONFIRM_DROP_PERCENT` | `0` (off) | A new price this many percent or more below the last stored price is held until a second check agrees. Recommended: `15` with several providers. |
+| `CONFIRM_RECHECK_MINUTES` | `15` | How soon the second check runs. |
 
 ## Scheduler
 
@@ -77,6 +80,13 @@ Generate a token with `openssl rand -hex 32`.
 | `SCHEDULER_ENABLED` | `true` | `false` disables automatic checks. Manual checks still work. |
 | `SCHEDULER_TICK_SECONDS` | `30` | How often the scheduler looks for due products. |
 | `SCHEDULER_BATCH_SIZE` | `5` | Maximum products checked per tick. |
+
+## Backups
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `BACKUP_INTERVAL_HOURS` | `24` | A backup is written to `backups/` in the data volume this often. `0` turns it off. |
+| `BACKUP_KEEP` | `7` | Number of backups kept. Older ones are deleted. |
 
 ## Notifications
 

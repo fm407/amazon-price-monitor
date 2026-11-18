@@ -151,3 +151,19 @@ Regression tests are in `tests/test_free_tier_providers.py`.
 | A "limit reached" skip on a later provider replaced an earlier real error such as a timeout, so the failure was not counted | The last outcome in the chain always won | Outcomes are ranked: a real provider error, then a skip, then "not configured" |
 | The fallback price parser for Scrapingdog could misread a decimal comma, a dot used as thousands separator, or a price range | The pattern accepted any digits after the symbol | Only unambiguous US-style amounts are accepted. Everything else yields no price |
 | A provider without credentials in the chain reserved budget for a request that was never sent | The reservation happened before the configuration check | Unconfigured providers are skipped before anything is reserved |
+
+## 14. Findings of the code review of the confirmation, pacing and backup features
+
+Two high and four medium findings. All were fixed before the branch was merged.
+Regression tests are in `tests/test_trust_and_ops.py`.
+
+| Finding | Root cause | Correction |
+|---|---|---|
+| High: two unrelated odd readings could confirm each other, even weeks apart, and send an alert | A held reading never expired, and the second reading only had to be "also a large drop" | The second reading must be within 5% of the held one and arrive within 24 hours. A different large drop replaces the held value. An answer without a valid price, and a pause, clear it |
+| High: a back-in-stock alert was lost when the returning price was held for confirmation | The stock state was updated before the hold decision, so the confirming check no longer saw "out of stock" | The stock state is left unchanged while a reading is held |
+| An answer that did not state the stock erased an earlier "out of stock" | Every answer overwrote the stored stock state | "Unknown" no longer overwrites a stated value. A valid price after "out of stock" counts as back in stock |
+| A failed backup left a partial file that blocked retries and could push out a good backup | The backup was written directly under its final name | Backups are written under a temporary name and renamed when complete. A failed attempt leaves nothing behind |
+| The provider test on the Settings page could stall the dashboard while a slow provider answered | The route was an async function that called blocking code | It is a plain function that runs in the thread pool, like every other route |
+| A skipped check could be recorded under the wrong provider | The ledger entry used the last provider in the chain, not the one the reason belonged to | Each outcome carries its provider, and the entry uses that |
+| The back-in-stock message printed a target price and savings | It reused the price-drop message | It shows the current price and the last price before the product went out of stock |
+| On-demand backups were deleted by the automatic retention, and could postpone the scheduled backup | Both used the same file name pattern | On-demand backups have their own name and are never deleted automatically |

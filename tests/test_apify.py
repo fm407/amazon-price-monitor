@@ -189,6 +189,7 @@ def paid_ctx(tmp_path, handler, **overrides):
         "apify_token": "apify-token-123", "apify_actor_id": "junglee/amazon-crawler",
         "canopy_cost_per_request_usd": Decimal("0.01"), "apify_cost_per_run_usd": Decimal("0.02"),
         "allow_paid_api_requests": True, "provider_max_attempts": 1, "notify_mock_enabled": True,
+        "pace_monthly_limits": False,
     }  # fmt: skip
     settings = Settings(
         _env_file=None, data_dir=tmp_path, scheduler_enabled=False, log_level="WARNING", **{**values, **overrides}

@@ -43,7 +43,7 @@ def test_request_quota_spills_over_to_the_next_provider(tmp_path):
     providers = [check_product(ctx, pid).provider for _ in range(4)]
     assert providers == ["canopy", "canopy", "apify", "apify"]
     assert calls == ["canopy", "canopy", "apify", "apify"]
-    assert categories(ctx)[2:4] == [("canopy", "skipped_provider_quota"), ("apify", "ok")]
+    assert categories(ctx) == [("canopy", "ok"), ("canopy", "ok"), ("apify", "ok"), ("apify", "ok")]  # no skip noise
     with ctx.sessions() as session:
         assert [o.provider for o in session.scalars(select(PriceObservation))] == ["canopy", "canopy", "apify", "apify"]
         assert budget.provider_month(session, "canopy", ctx.now())[0] == 2  # skips do not count as requests
@@ -60,7 +60,8 @@ def test_both_allowances_used_up_stops_checks_until_next_month(tmp_path):
     result = check_product(ctx, pid)  # Apify: $0.80 used, another $0.40 would exceed its $1.00 allowance
     assert (result.status, result.category) == ("skipped", "provider_quota")
     assert calls == ["canopy", "apify", "apify"]
-    assert categories(ctx)[-2:] == [("canopy", "skipped_provider_quota"), ("apify", "skipped_provider_quota")]
+    assert categories(ctx)[-1] == ("apify", "skipped_provider_quota")  # one entry for the skipped check
+    assert [c for _, c in categories(ctx)].count("skipped_provider_quota") == 1
     ctx.now.advance(days=20)  # next calendar month: both allowances are fresh
     assert check_product(ctx, pid).provider == "canopy"
 

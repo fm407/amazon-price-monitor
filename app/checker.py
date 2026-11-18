@@ -14,6 +14,7 @@ from app import alerts, budget, notify
 from app.context import AppContext
 from app.logging_config import job_id_var, redact
 from app.models import PriceObservation, Product
+from app.money import apply_discount, format_money
 from app.normalize import NormalizedPrice, PriceRejected, normalize
 from app.providers.base import ProductData, ProviderError
 
@@ -27,7 +28,8 @@ RAW_LIMIT_BYTES = 4000
 # Failures of the provider itself. Only these justify trying the fallback provider.
 FALLBACK_CATEGORIES = {
     "auth", "quota", "rate_limited", "timeout", "network", "http_error", "malformed",
-    "not_configured", "run_failed", "unsupported_marketplace", "provider_blocked", "provider_quota", "internal",
+    "not_configured", "run_failed", "unsupported_marketplace", "provider_blocked", "provider_quota",
+    "provider_paced", "internal",
 }  # fmt: skip
 # Failures worth retrying sooner than the normal interval.
 TRANSIENT_CATEGORIES = {
@@ -55,9 +57,12 @@ class FetchFailure:
     category: str
     message: str
     skipped: bool = False
+    provider: str | None = None  # the provider this outcome belongs to
 
 
-def provider_chain(ctx: AppContext, product_provider: str | None, seller_filter: str = "any") -> list[str]:
+def provider_chain(
+    ctx: AppContext, product_provider: str | None, seller_filter: str = "any", avoid_first: str | None = None
+) -> list[str]:
     """Providers to try, in order. Providers that cannot serve this product's settings are left out."""
     primary = product_provider if product_provider in ctx.providers else ctx.settings.provider
     chain = [primary] if primary in ctx.providers else []
@@ -68,6 +73,9 @@ def provider_chain(ctx: AppContext, product_provider: str | None, seller_filter:
         # "Amazon as seller only" needs the seller's name. A provider that never reports it would
         # use up its allowance on prices that are always rejected.
         chain = [name for name in chain if ctx.providers[name].reports_seller]
+    if avoid_first in chain and len(chain) > 1:
+        # A second reading is worth more from a different source than the first one.
+        chain = [name for name in chain if name != avoid_first] + [avoid_first]
     return chain
 
 
@@ -137,32 +145,37 @@ def fetch(
         if not provider.configured:
             # No request can be sent, so nothing is reserved against the budget or the provider's limit.
             failure = _prefer(
-                failure, FetchFailure("not_configured", f"The {name} provider has no credentials configured.")
+                failure,
+                FetchFailure("not_configured", f"The {name} provider has no credentials configured.", provider=name),
             )
             continue
         blocked = ctx.blocked_until.get(name)
         if blocked and blocked > ctx.now():
             budget.record_skip(ctx, provider, product_id, asin, "provider_blocked")
             failure = _prefer(
-                failure, FetchFailure("provider_blocked", budget.DENIAL_MESSAGES["provider_blocked"], skipped=True)
+                failure,
+                FetchFailure(
+                    "provider_blocked", budget.DENIAL_MESSAGES["provider_blocked"], skipped=True, provider=name
+                ),
             )
             continue
         for attempt in range(max(1, ctx.settings.provider_max_attempts)):
             request_id, denial = budget.reserve(ctx, provider, product_id, asin, attempt)
             if request_id is None:
                 assert denial is not None  # noqa: S101
-                if denial == "provider_quota":
+                if denial in budget.PROVIDER_LIMIT_DENIALS:
                     # This provider's own allowance is used up. The next provider in the chain may still have one.
-                    failure = _prefer(failure, FetchFailure(denial, budget.DENIAL_MESSAGES[denial], skipped=True))
+                    limit_hit = FetchFailure(denial, budget.DENIAL_MESSAGES[denial], skipped=True, provider=name)
+                    failure = _prefer(failure, limit_hit)
                     break
                 # Global budget denials end the whole chain: never fall back to another paid provider.
                 if denial == "monthly_budget":
                     budget.notify_exhausted_once(ctx)
-                return None, name, FetchFailure(denial, budget.DENIAL_MESSAGES[denial], skipped=True)
+                return None, name, FetchFailure(denial, budget.DENIAL_MESSAGES[denial], skipped=True, provider=name)
             outcome = _attempt(ctx, name, request_id, asin, marketplace)
             if isinstance(outcome, ProductData):
                 return outcome, name, None
-            failure = FetchFailure(outcome.category, outcome.message)
+            failure = FetchFailure(outcome.category, outcome.message, provider=name)
             log.warning(
                 "provider request failed",
                 extra={"provider": name, "asin": asin, "category": outcome.category, "attempt": attempt + 1},
@@ -181,6 +194,9 @@ def fetch(
             break
     if failure is None:
         failure = FetchFailure("not_configured", "No configured price provider can check this product.")
+    if failure.provider in ctx.providers and failure.category in budget.PROVIDER_LIMIT_DENIALS:
+        # No provider could take the check. One ledger entry, for the provider the reason belongs to.
+        budget.record_skip(ctx, ctx.providers[failure.provider], product_id, asin, failure.category)
     return None, name, failure
 
 
@@ -212,7 +228,9 @@ def _update_metadata(product: Product, data: ProductData) -> None:
         product.brand = data.brand[:200]
     if data.image_url and data.image_url.startswith(("https://", "/static/")) and len(data.image_url) <= 1000:
         product.image_url = data.image_url
-    product.availability = data.availability
+    if data.availability != "unknown":
+        # An answer without a stock statement does not erase what an earlier answer stated.
+        product.availability = data.availability
 
 
 def record_observation(
@@ -259,6 +277,7 @@ def record_observation(
         log.info("price changed", extra={"product_id": product.id, "old_minor": previous, "new_minor": current})
     product.latest_price_minor = current
     product.latest_seller = observation.seller
+    product.availability = observation.availability  # a valid offer exists, even when stock is not stated
     product.latest_condition = observation.condition
     product.lowest_minor = current if previous_low is None else min(previous_low, current)
     product.highest_minor = current if product.highest_minor is None else max(product.highest_minor, current)
@@ -266,6 +285,83 @@ def record_observation(
     product.consecutive_failures = 0
     product.last_error = None
     return observation, previous, previous_low
+
+
+CONFIRM_TOLERANCE_BP = 500  # a second reading confirms a held one when it is within 5% of it
+PENDING_MAX_AGE = timedelta(hours=24)  # an older held reading is forgotten
+
+
+def clear_pending(product: Product) -> None:
+    product.pending_price_minor = product.pending_since = product.pending_provider = None
+
+
+def _hold_for_confirmation(
+    ctx: AppContext, product: Product, price: NormalizedPrice, provider: str, now: datetime
+) -> CheckResult | None:
+    """Hold a sudden large drop until a second reading agrees. Returns a result when the price is held.
+
+    One odd reading (a provider glitch, a different offer) must not send an alert. The first
+    reading of a large drop is kept aside and a second check is scheduled soon. The drop is
+    recorded only when a second reading, taken within a day, is within 5% of the held one.
+    A normal reading discards the held one. A different large drop becomes the new held reading.
+    """
+    threshold_bp = int(ctx.settings.confirm_drop_percent * 100)
+    latest, current = product.latest_price_minor, price.monitored_minor
+    suspicious = bool(threshold_bp and latest and current <= apply_discount(latest, threshold_bp))
+    held, since = product.pending_price_minor, product.pending_since
+    fresh = held is not None and since is not None and now - since <= PENDING_MAX_AGE
+    if suspicious and fresh and held is not None and abs(current - held) * 10000 <= held * CONFIRM_TOLERANCE_BP:
+        log.info("held price drop confirmed", extra={"product_id": product.id, "minor": current})
+        clear_pending(product)
+        return None
+    if not suspicious:
+        if held is not None:
+            log.info("held price drop discarded", extra={"product_id": product.id})
+        clear_pending(product)
+        return None
+    product.pending_price_minor, product.pending_since, product.pending_provider = current, now, provider
+    product.consecutive_failures = 0
+    shown = format_money(current, price.currency)
+    message = f"A drop to {shown} is waiting for a second reading before it is recorded."
+    product.last_error, product.last_error_at = message, now
+    product.next_check_at = now + timedelta(minutes=ctx.settings.confirm_recheck_minutes)
+    log.info("price drop held for confirmation", extra={"product_id": product.id, "minor": current})
+    return CheckResult("pending", "pending_confirmation", message, provider)
+
+
+def probe_provider(ctx: AppContext, name: str, asin: str, marketplace: str) -> dict[str, Any]:
+    """Send one real request to one provider and report what it returned and how it would be used.
+
+    Nothing is stored except the usual ledger entry. The request counts against the limits.
+    """
+    data, _name, failure = fetch(ctx, None, asin, marketplace, [name])
+    if data is None:
+        failure = failure or FetchFailure("internal", "Unknown failure")
+        return {"ok": False, "provider": name, "category": failure.category, "message": redact(failure.message)}
+    report: dict[str, Any] = {
+        "ok": True,
+        "provider": name,
+        "asin": asin,
+        "title": data.title,
+        "brand": data.brand,
+        "raw_price": None if data.price is None else str(data.price),
+        "currency": data.currency,
+        "list_price": None if data.list_price is None else str(data.list_price),
+        "shipping": None if data.shipping is None else str(data.shipping),
+        "seller": data.seller,
+        "condition": data.condition,
+        "availability": data.availability,
+        "image_url": data.image_url,
+        "reported_cost_usd": None if data.actual_cost_usd is None else str(data.actual_cost_usd),
+    }
+    try:
+        price = normalize(data, expected_currency=None)
+    except PriceRejected as rejected:
+        report.update(usable=False, verdict=rejected.message)
+    else:
+        shown = format_money(price.monitored_minor, price.currency)
+        report.update(usable=True, verdict=f"Would be recorded as {shown} ({price.price_basis}).")
+    return report
 
 
 def _apply_failure(ctx: AppContext, product: Product, failure: FetchFailure, now: datetime) -> CheckResult:
@@ -295,6 +391,7 @@ def _apply(
     product.last_attempt_at = now
     if data is None or provider is None:
         return _apply_failure(ctx, product, failure or FetchFailure("internal", "Unknown failure"), now)
+    previous_availability = product.availability
     _update_metadata(product, data)
     try:
         price = normalize(
@@ -305,15 +402,23 @@ def _apply(
         )
     except PriceRejected as rejected:
         # The provider answered, but there is no valid price. Keep the last known valid price untouched.
+        clear_pending(product)  # a held drop was not confirmed by this answer
         product.last_error = rejected.message
         product.last_error_at = now
         product.consecutive_failures = 0
         schedule_next(ctx, product, now)
         log.info("no valid price", extra={"product_id": product.id, "reason": rejected.code})
         return CheckResult("no_price", rejected.code, rejected.message, provider)
+    held = _hold_for_confirmation(ctx, product, price, provider, now)
+    if held is not None:
+        # Nothing is recorded yet, so the stock state stays as it was. A back-in-stock alert is
+        # then decided when the reading is confirmed.
+        product.availability = previous_availability
+        return held
     observation, previous, previous_low = record_observation(session, product, price, data, provider, now)
     # Events and their deliveries are committed together with the observation, before anything is sent.
-    for event, rule in alerts.evaluate_rules(session, product, observation, previous, previous_low, now):
+    events = alerts.evaluate_rules(session, product, observation, previous, previous_low, now, previous_availability)
+    for event, rule in events:
         notify.queue_alert(session, ctx, event, rule, product, observation)
     schedule_next(ctx, product, now)
     return CheckResult("ok", "ok", "", provider, observation.id)
@@ -330,7 +435,7 @@ def check_product(ctx: AppContext, product_id: int) -> CheckResult:
             if product is None:
                 return CheckResult("deleted", "deleted", "The product no longer exists.")
             asin, marketplace = product.asin, product.marketplace
-            chain = provider_chain(ctx, product.provider, product.seller_filter)
+            chain = provider_chain(ctx, product.provider, product.seller_filter, product.pending_provider)
         # No database session is held open during network I/O.
         data, provider, failure = fetch(ctx, product_id, asin, marketplace, chain)
         with ctx.sessions() as session:

@@ -10,7 +10,9 @@ from app import alerts
 from app.models import AlertEvent, AlertRule, NotificationDelivery, PriceObservation, Product, ProviderRequest
 from app.money import from_minor, micro_to_usd, percent_of
 
-RuleKind = Literal["pct_below_baseline", "fixed_target", "pct_below_average", "new_low", "pct_drop_since_last"]
+RuleKind = Literal[
+    "pct_below_baseline", "fixed_target", "pct_below_average", "new_low", "pct_drop_since_last", "back_in_stock"
+]
 Channel = Literal["discord", "email", "mock"]
 
 
@@ -81,6 +83,10 @@ class AlertUpdate(Strict):
     further_drop_percent: Decimal | None = Field(default=None, ge=0, lt=100)
 
 
+class ProviderTest(Strict):
+    input: str = Field(min_length=10, max_length=2000, description="Amazon product URL, short link or ASIN")
+
+
 class MockControl(Strict):
     price: Decimal | None = None
     mode: Literal["ok", "outage", "rate_limit", "invalid", "no_price", "out_of_stock", "not_found", "auth"] | None = (
@@ -131,6 +137,7 @@ class ProductOut(BaseModel):
     lowest_price: Decimal | None
     highest_price: Decimal | None
     target_price: Decimal | None
+    pending_price: Decimal | None
     change_from_baseline_percent: Decimal | None
     latest_seller: str | None
     latest_condition: str | None
@@ -262,6 +269,7 @@ def product_out(product: Product) -> ProductOut:
         lowest_price=_money(product.lowest_minor, currency),
         highest_price=_money(product.highest_minor, currency),
         target_price=_money(alerts.primary_target(product), currency),
+        pending_price=_money(product.pending_price_minor, currency),
         change_from_baseline_percent=change_percent(product),
         alerts=[alert_out(rule, currency) for rule in product.rules],
     )

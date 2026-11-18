@@ -47,22 +47,37 @@ so the application can write to it without extra steps.
 
 ## Backup
 
+**Automatic.** Once a day the application writes a consistent copy of the database to
+`/app/data/backups/monitor-<date>-<time>.db` and keeps the newest seven. Change this with
+`BACKUP_INTERVAL_HOURS` and `BACKUP_KEEP`. **Settings** shows the time of the last backup.
+
+**On demand.**
+
 ```bash
 docker compose exec app python -m app backup
+```
+
+Both use SQLite's online backup, so the application keeps running.
+
+**Copy the backups off the volume.** A backup inside the same volume does not protect against
+losing the volume or the disk.
+
+```bash
 docker compose cp app:/app/data/backups ./
 ```
 
-The first command writes a consistent copy to `/app/data/backups/monitor-<date>-<time>.db`.
-It uses SQLite's online backup, so the application keeps running.
-The second command copies the backups to the host. Keep them somewhere else as well.
-Old files in the volume's `backups/` folder are not removed automatically.
+Run that from a cron job on the host if you want copies elsewhere.
+
+Backups made on demand are named `manual-<date>-<time>.db`. They are never deleted automatically,
+so remove old ones yourself. A backup is written under a temporary name first, so an interrupted
+backup never leaves a file that looks complete.
 
 ## Restore
 
 ```bash
 docker compose stop app
 docker compose run --rm -v "$PWD/backups":/restore:ro app \
-  python -m app restore /restore/monitor-20261118-182247.db
+  python -m app restore /restore/manual-20261118-182247.db
 docker compose up -d
 ```
 

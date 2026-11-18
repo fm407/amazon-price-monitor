@@ -43,6 +43,10 @@ The **Activity** page lists failed and skipped provider requests with their reas
 | "The provider returned no valid currency" (Apify) | Map `currency` to the right output field in `APIFY_FIELD_MAP`. |
 | Apify: "Actor, run or dataset not found" | `APIFY_ACTOR_ID` is wrong. Use `username/actor-name`. |
 | Apify: "returned no product for this ASIN" | The Actor ran but produced no item. Run it once in the Apify console with the same input and compare its input schema with `APIFY_INPUT_TEMPLATE`. |
+| "A drop to ... is waiting for a second reading" | `CONFIRM_DROP_PERCENT` is set and the price fell sharply. A second check runs within minutes. If it agrees, the price is recorded and alerts are sent. |
+| "This provider is ahead of its monthly pace" | Every provider in your list has used its share of the month so far. Checks resume as the month goes on. Check less often, add a provider, or set `PACE_MONTHLY_LIMITS=false`. |
+| "This provider's own monthly limit is reached" | Every provider in your list has used its monthly limit. Checks resume next month. |
+| A provider returns odd prices | Use *Test a provider* on the Settings page and compare the result with the Amazon page. |
 | A product was paused by itself | The provider reported "not found" three times in a row. Check the link, then press **Resume monitoring**. |
 | "This is not a recognised Amazon product link" | Use a product page link from `amazon.com` (it contains `/dp/` and a 10-character ASIN) or the ASIN itself. Search and category links do not work. |
 | Other Amazon sites are rejected | Only `amazon.com` is enabled in this release. |
@@ -54,6 +58,8 @@ The **Activity** page lists failed and skipped provider requests with their reas
 | Problem | Cause and fix |
 |---|---|
 | No alert although the price is below the target | Alerts fire when the price *crosses* the target. If the rule was created while the price was already below, or it already alerted, it stays quiet until the price rises above the target and drops again. Turn on reminders for repeated messages. |
+| The alert came a few minutes after the price dropped | With `CONFIRM_DROP_PERCENT` set, a large drop is confirmed by a second check before the alert is sent. |
+| "Back in stock" did not fire | It fires when a check reported the product out of stock and a later check reports a valid in-stock price. A failed check or an unknown stock state does not count. |
 | No second alert shortly after the first | The rule's cooldown (60 minutes by default) is still running. The alert is sent at the next check after the cooldown. |
 | "Percent below historical average" never fires | It needs five earlier observations inside its lookback window. |
 | "Send test notification" fails for Discord with HTTP 404 | The webhook was deleted or the URL is incomplete. Create a new webhook. |
