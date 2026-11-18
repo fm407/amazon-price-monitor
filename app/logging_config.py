@@ -40,7 +40,7 @@ def configure_logging(level: str, secrets: list[str]) -> None:
     root = logging.getLogger()
     root.handlers[:] = [handler]
     root.setLevel(level.upper())
-    # httpx logs full request URLs at INFO; Telegram URLs contain the bot token.
+    # httpx logs full request URLs at INFO; the Discord webhook URL contains its token.
     logging.getLogger("httpx").setLevel(logging.WARNING)
     logging.getLogger("httpcore").setLevel(logging.WARNING)
     for name in ("uvicorn", "uvicorn.error", "uvicorn.access"):

@@ -126,19 +126,6 @@ def set_baseline(product: Product, baseline_minor: int | None = None) -> None:
     product.baseline_minor = value
 
 
-def average_minor(session: Session, product_id: int, since: datetime | None = None, before_id: int | None = None):
-    """(average, count) of stored observations, optionally limited to a lookback window."""
-    query = select(func.avg(PriceObservation.price_minor), func.count()).where(
-        PriceObservation.product_id == product_id
-    )
-    if since is not None:
-        query = query.where(PriceObservation.observed_at >= since)
-    if before_id is not None:
-        query = query.where(PriceObservation.id < before_id)
-    average, count = session.execute(query).one()
-    return (None if average is None else int(round(average))), count
-
-
 def history(
     session: Session,
     product_id: int,
