@@ -15,7 +15,7 @@ All state is in one SQLite database on a Docker volume.
                         |                 |                                                  |
                         |    scheduler.py --> checker.py  (the check pipeline)               |
                         |                       |-- budget.py      reserve cost, hard limits |
-                        |                       |-- providers/     Canopy | Apify | Mock     |
+                        |                       |-- providers/     5 APIs and a mock        |
                         |                       |-- normalize.py   is this a valid price?    |
                         |                       |-- alerts.py      rule evaluation           |
                         |                       '-- notify.py      Discord | SMTP | Mock     |
@@ -62,7 +62,8 @@ application needs. Tests build a context with a fake clock, a no-op sleep and mo
 2. **Read** the product, then close the database session. No session is held during network calls.
 3. **Fetch** through the provider chain (primary, then fallback). Each attempt:
    - is skipped when the provider is paused after an authentication, quota or rate-limit error;
-   - reserves its cost in the ledger (see below) or is denied;
+   - reserves its cost in the ledger (see below) or is denied. A provider's own monthly limit moves
+     the check to the next provider. A global limit stops the check;
    - runs inside a per-provider concurrency limit;
    - is retried only for temporary errors, with exponential backoff, jitter and `Retry-After`.
 4. **Re-read** the product. If it was deleted meanwhile, stop.
@@ -172,7 +173,7 @@ run against PostgreSQL. It was left out because one SQLite file meets the requir
 | To add | Where |
 |---|---|
 | A marketplace | `MARKETPLACES` and `SUPPORTED_MARKETPLACES` in `amazon.py`. Products already store marketplace and currency. |
-| A provider | A class with `fetch_product` in `providers/`, registered in `build_providers`. |
+| A provider | A class with `fetch_product` in `providers/`, registered in `build_providers`. For an API that answers one GET request with JSON, subclass `HttpJsonProvider` (about 40 lines). |
 | A notification channel | A class with `send` in `notify.py`, registered in `build_notifiers`. |
 | An alert type | A branch in `alerts.evaluate_condition` and a label in `KIND_LABELS`. |
 | Another retailer | A new identity parser next to `amazon.py` and a provider. `products.marketplace` would become a retailer plus region. |

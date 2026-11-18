@@ -12,6 +12,7 @@ from app.checker import check_product, provider_chain
 from app.context import AppContext
 from app.models import AlertEvent, AlertRule, NotificationDelivery, Product, ProviderRequest
 from app.money import micro_to_usd, to_minor
+from app.providers import provider_label
 from app.providers.mock import MockProvider
 from app.schemas import (
     AlertCreate,
@@ -349,7 +350,10 @@ def provider_status(ctx: AppContext, session: Session) -> list[dict[str, Any]]:
     now = ctx.now()
     chain = provider_chain(ctx, None)
     result = []
-    for name, provider in ctx.providers.items():
+    # Chain order first (the order in which providers are tried), then the remaining providers.
+    ordered = chain + [name for name in ctx.providers if name not in chain]
+    for name in ordered:
+        provider = ctx.providers[name]
         last = session.scalar(
             select(ProviderRequest)
             .where(ProviderRequest.provider == name, ProviderRequest.category.not_like("skipped%"))
@@ -374,6 +378,8 @@ def provider_status(ctx: AppContext, session: Session) -> list[dict[str, Any]]:
         result.append(
             {
                 "name": name,
+                "label": provider_label(name),
+                "order": chain.index(name) + 1 if name in chain else None,
                 "role": "primary" if chain[:1] == [name] else ("fallback" if name in chain else "available"),
                 "configured": provider.configured,
                 "paid": provider.is_paid,
@@ -431,6 +437,7 @@ def settings_report(ctx: AppContext) -> dict[str, Any]:
         "version": __version__,
         "provider": s.provider,
         "fallback_provider": ", ".join(s.fallback_providers) or None,
+        "provider_chain": [provider_label(name) for name in [s.provider, *s.fallback_providers]],
         "demo_mode": s.demo_mode,
         "timezone": s.timezone,
         "default_check_interval_minutes": s.default_check_interval_minutes,

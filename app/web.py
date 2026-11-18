@@ -18,11 +18,13 @@ from app.checker import check_product
 from app.context import AppContext
 from app.models import AlertEvent, AlertRule, NotificationDelivery, PriceObservation, Product, ProviderRequest
 from app.money import format_money, to_minor
+from app.providers import provider_label
 from app.schemas import AlertCreate, AlertUpdate, MockControl, ProductCreate, ProductUpdate, change_percent
 from app.security import get_ctx, get_session, require_csrf
 
 templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
 templates.env.filters["money"] = format_money
+templates.env.filters["provider"] = provider_label
 INTERVAL_CHOICES = [
     (30, "30 minutes"),
     (60, "1 hour"),

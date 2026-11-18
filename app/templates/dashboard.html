@@ -107,7 +107,7 @@
             <dt>Lowest</dt><dd>{{ p.lowest_minor|money(c.currency) }}</dd>
             <dt>Availability</dt><dd>{{ {'in_stock': 'In stock', 'out_of_stock': 'Out of stock'}.get(p.availability, 'unknown') }}</dd>
             <dt>Checked</dt><dd>{{ localtime(p.last_attempt_at) }}</dd>
-            <dt>Provider</dt><dd>{{ (p.provider or default_provider)|capitalize }}</dd>
+            <dt>Provider</dt><dd>{{ (p.provider or default_provider)|provider }}</dd>
           </dl>
         </div>
       </div>
@@ -146,7 +146,7 @@
     <div class="card-header fw-semibold">Recent operational failures</div>
     <ul class="list-group list-group-flush">
       {% for r in stats.failures %}
-      <li class="list-group-item small">{{ r.provider|capitalize }} · {{ r.asin }} · <strong>{{ r.category }}</strong><br>
+      <li class="list-group-item small">{{ r.provider|provider }} · {{ r.asin }} · <strong>{{ r.category }}</strong><br>
         <span class="text-secondary">{{ r.detail or '' }} · {{ localtime(r.started_at) }}</span></li>
       {% else %}<li class="list-group-item small text-secondary">No failures recorded.</li>{% endfor %}
     </ul>

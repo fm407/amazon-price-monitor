@@ -22,6 +22,7 @@ from app.config import Settings
 from app.logging_config import redact
 from app.models import AlertEvent, AlertRule, NotificationDelivery, PriceObservation, Product
 from app.money import format_money, percent_of
+from app.providers import provider_label
 
 if TYPE_CHECKING:
     from app.context import AppContext
@@ -200,7 +201,7 @@ def alert_text(
         f"Seller: {observation.seller or 'unknown'}",
         f"Condition: {observation.condition}",
         f"Availability: {AVAILABILITY.get(observation.availability, 'unknown')}",
-        f"Provider: {observation.provider.capitalize()}",
+        f"Provider: {provider_label(observation.provider)}",
         f"Rule: {rule_text}",
         f"Checked: {format_local(observation.observed_at, settings)}",
     ]

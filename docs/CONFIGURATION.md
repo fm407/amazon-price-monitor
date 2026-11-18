@@ -26,7 +26,7 @@ Generate a token with `openssl rand -hex 32`.
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `PROVIDER` | `mock` | `mock`, `canopy` or `apify`. |
+| `PROVIDER` | `mock` | `mock`, `canopy`, `apify`, `serpapi`, `easyparser` or `scrapingdog`. |
 | `FALLBACK_PROVIDER` | empty | One provider or a comma-separated list, tried in order when the primary provider fails or reaches its own monthly limit. Must not contain `PROVIDER`. Not allowed with `PROVIDER=mock`. |
 | `DEMO_MODE` | `false` (`true` in `.env.example`) | Seeds three fictional demo products. Requires `PROVIDER=mock`. `false` removes them at start. |
 | `HTTP_TIMEOUT_SECONDS` | `20` | Timeout for outbound HTTP requests. |
@@ -48,6 +48,18 @@ Generate a token with `openssl rand -hex 32`.
 | `APIFY_MAX_MONTHLY_REQUESTS` | empty | Optional run limit for Apify alone. |
 | `APIFY_MAX_MONTHLY_SPEND_USD` | empty | Optional spend limit for Apify alone, for example `5.00` for the free credit. |
 | `APIFY_BASE_URL` | `https://api.apify.com` | Advanced. |
+| `SERPAPI_API_KEY` | empty | SerpApi API key. Secret. |
+| `SERPAPI_COST_PER_REQUEST_USD` | `0.01` | Your estimate of the cost of one SerpApi request. Use `0` on a free plan. |
+| `SERPAPI_MAX_MONTHLY_REQUESTS` | empty | Optional request limit for SerpApi alone. |
+| `SERPAPI_MAX_MONTHLY_SPEND_USD` | empty | Optional spend limit for SerpApi alone. |
+| `EASYPARSER_API_KEY` | empty | Easyparser API key. Secret. |
+| `EASYPARSER_COST_PER_REQUEST_USD` | `0.01` | Your estimate of the cost of one Easyparser request. Use `0` on a free plan. |
+| `EASYPARSER_MAX_MONTHLY_REQUESTS` | empty | Optional request limit for Easyparser alone. |
+| `EASYPARSER_MAX_MONTHLY_SPEND_USD` | empty | Optional spend limit for Easyparser alone. |
+| `SCRAPINGDOG_API_KEY` | empty | Scrapingdog API key. Secret. |
+| `SCRAPINGDOG_COST_PER_REQUEST_USD` | `0.01` | Your estimate of the cost of one Scrapingdog request. Use `0` on a free plan. |
+| `SCRAPINGDOG_MAX_MONTHLY_REQUESTS` | empty | Optional request limit for Scrapingdog alone. |
+| `SCRAPINGDOG_MAX_MONTHLY_SPEND_USD` | empty | Optional spend limit for Scrapingdog alone. |
 
 ## Cost controls
 

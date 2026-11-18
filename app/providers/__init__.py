@@ -11,7 +11,21 @@ from app.providers.mock import MockProvider
 from app.providers.scrapingdog import ScrapingdogProvider
 from app.providers.serpapi import SerpApiProvider
 
-__all__ = ["PriceProvider", "ProductData", "ProviderError", "build_providers"]
+__all__ = ["PROVIDER_LABELS", "PriceProvider", "ProductData", "ProviderError", "build_providers", "provider_label"]
+
+PROVIDER_LABELS = {
+    "mock": "Mock",
+    "canopy": "Canopy",
+    "apify": "Apify",
+    "serpapi": "SerpApi",
+    "easyparser": "Easyparser",
+    "scrapingdog": "Scrapingdog",
+}
+
+
+def provider_label(name: str | None) -> str:
+    """Display name of a provider. Unknown names are shown capitalised."""
+    return PROVIDER_LABELS.get(name or "", (name or "unknown").capitalize())
 
 
 def build_providers(settings: Settings, client: httpx.Client) -> dict[str, PriceProvider]:
