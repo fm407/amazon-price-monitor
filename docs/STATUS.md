@@ -19,7 +19,8 @@ Last updated: 2026-11-18. Version 1.0.0.
 | 11 | Price history chart in Discord and email alerts | `feature-alert-charts` | merged |
 
 Each milestone was developed on its own branch and merged into `main` with a merge commit after
-`scripts/check.sh` passed. The repository has one maintainer, so merges were verified locally
+`scripts/check.sh` passed. The branches were deleted after merging. Their merge commits remain in
+the history of `main` (`git log --merges`). The repository has one maintainer, so merges were verified locally
 instead of through pull requests. To repeat the process for a change:
 
 ```bash
